@@ -9,30 +9,32 @@ const AREAS = ['WHY','WHO','FOR WHOM','CONTEXT','OFFER','MESSAGE','CHANNELS','SY
 const INITIAL = [3,5,4,2,4,3,5,3]
 const MAX = 6
 const MOBILE = typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches
+const INNER = MOBILE ? 1.62 : 2.05
+const OUTER = MOBILE ? 3.18 : 4.05
+const BLOCK_HEIGHT = MOBILE ? .86 : .66
+const LEVEL_STEP = MOBILE ? .88 : .68
 
 function Wedge({ index, level, active }) {
   const geometry = useMemo(() => {
     const count = 8
     const gap = 0.018
-    const inner = 2.05
-    const outer = 4.05
     const step = (Math.PI * 2) / count
     const a0 = -Math.PI / 2 - step / 2 + index * step + gap
     const a1 = a0 + step - gap * 2
     const shape = new THREE.Shape()
-    shape.moveTo(Math.cos(a0) * outer, Math.sin(a0) * outer)
-    shape.absarc(0, 0, outer, a0, a1, false)
-    shape.lineTo(Math.cos(a1) * inner, Math.sin(a1) * inner)
-    shape.absarc(0, 0, inner, a1, a0, true)
+    shape.moveTo(Math.cos(a0) * OUTER, Math.sin(a0) * OUTER)
+    shape.absarc(0, 0, OUTER, a0, a1, false)
+    shape.lineTo(Math.cos(a1) * INNER, Math.sin(a1) * INNER)
+    shape.absarc(0, 0, INNER, a1, a0, true)
     shape.closePath()
-    const g = new THREE.ExtrudeGeometry(shape, { depth: .66, bevelEnabled: false, curveSegments: MOBILE ? 8 : 18 })
+    const g = new THREE.ExtrudeGeometry(shape, { depth: BLOCK_HEIGHT, bevelEnabled: false, curveSegments: MOBILE ? 10 : 18 })
     g.rotateX(-Math.PI / 2)
     return g
   }, [index])
 
   const white = (index + level) % 4 === 0
   return (
-    <mesh geometry={geometry} position={[0, level * .68, 0]}>
+    <mesh geometry={geometry} position={[0, level * LEVEL_STEP, 0]}>
       <meshPhysicalMaterial
         color={white ? '#edf6ff' : '#1670ff'}
         transparent
@@ -48,7 +50,8 @@ function Wedge({ index, level, active }) {
 }
 
 function Blueprint() {
-  const rings = [2.05, 4.15, 5.0, 5.7]
+  const s = MOBILE ? .785 : 1
+  const rings = [2.05*s, 4.15*s, 5.0*s, 5.7*s]
   return <group position={[0,.01,0]}>
     {rings.map((r,i) => <mesh key={r} rotation={[-Math.PI/2,0,0]}>
       <ringGeometry args={[r-.012,r+.012,MOBILE ? 48 : 96]} />
@@ -56,7 +59,8 @@ function Blueprint() {
     </mesh>)}
     {Array.from({length:8}).map((_,i)=>{
       const a=i/8*Math.PI*2
-      return <mesh key={i} position={[Math.cos(a)*5, .01, Math.sin(a)*5]} rotation={[-Math.PI/2,0,0]}>
+      const r=5*s
+      return <mesh key={i} position={[Math.cos(a)*r, .01, Math.sin(a)*r]} rotation={[-Math.PI/2,0,0]}>
         <ringGeometry args={[.105,.15,MOBILE ? 16 : 24]} />
         <meshBasicMaterial color="#1769ff" />
       </mesh>
@@ -75,7 +79,7 @@ function Tower({ progress }) {
 
 function Scene({ progress }) {
   const camera = MOBILE
-    ? { position:[10.8,6.5,11.2], fov:34 }
+    ? { position:[10.8,6.4,11.2], fov:32 }
     : { position:[9.6,6.2,10], fov:32 }
   return <Canvas dpr={MOBILE ? 1 : [1,1.5]} gl={{ antialias: !MOBILE, powerPreference:'high-performance' }} camera={camera} frameloop="demand">
     <color attach="background" args={['#f6f8fb']} />
@@ -83,7 +87,7 @@ function Scene({ progress }) {
     <directionalLight position={[6,10,7]} intensity={3.1} />
     <directionalLight position={[-6,4,-4]} intensity={1.25} color="#83b7ff" />
     <Tower progress={progress}/>
-    <OrbitControls makeDefault target={[0,1.7,0]} minDistance={MOBILE ? 11 : 9} maxDistance={20} enablePan={false} enableDamping={false} minPolarAngle={.66} maxPolarAngle={1.25}/>
+    <OrbitControls makeDefault target={[0,MOBILE ? 2.05 : 1.7,0]} minDistance={MOBILE ? 13.5 : 9} maxDistance={22} enablePan={false} enableDamping={false} minPolarAngle={.66} maxPolarAngle={1.25}/>
   </Canvas>
 }
 
