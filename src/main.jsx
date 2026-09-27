@@ -1,13 +1,14 @@
 import React, { useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Canvas } from '@react-three/fiber'
-import { ContactShadows, Environment, OrbitControls } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import './styles.css'
 
 const AREAS = ['WHY','WHO','FOR WHOM','CONTEXT','OFFER','MESSAGE','CHANNELS','SYSTEM']
 const INITIAL = [3,5,4,2,4,3,5,3]
 const MAX = 6
+const MOBILE = typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches
 
 function Wedge({ index, level, active }) {
   const geometry = useMemo(() => {
@@ -24,23 +25,22 @@ function Wedge({ index, level, active }) {
     shape.lineTo(Math.cos(a1) * inner, Math.sin(a1) * inner)
     shape.absarc(0, 0, inner, a1, a0, true)
     shape.closePath()
-    const g = new THREE.ExtrudeGeometry(shape, { depth: .48, bevelEnabled: false, curveSegments: 32 })
+    const g = new THREE.ExtrudeGeometry(shape, { depth: .66, bevelEnabled: false, curveSegments: MOBILE ? 8 : 18 })
     g.rotateX(-Math.PI / 2)
     return g
   }, [index])
 
   const white = (index + level) % 4 === 0
   return (
-    <mesh geometry={geometry} position={[0, level * .5, 0]} castShadow receiveShadow>
+    <mesh geometry={geometry} position={[0, level * .68, 0]}>
       <meshPhysicalMaterial
         color={white ? '#edf6ff' : '#1670ff'}
         transparent
-        opacity={active ? .72 : .08}
-        transmission={active ? .35 : .75}
-        roughness={white ? .34 : .25}
-        thickness={.8}
-        ior={1.35}
-        clearcoat={.55}
+        opacity={active ? .7 : .055}
+        transmission={MOBILE ? 0 : active ? .18 : .35}
+        roughness={white ? .38 : .3}
+        thickness={MOBILE ? 0 : .45}
+        clearcoat={MOBILE ? .18 : .4}
         side={THREE.DoubleSide}
       />
     </mesh>
@@ -51,17 +51,15 @@ function Blueprint() {
   const rings = [2.05, 4.15, 5.0, 5.7]
   return <group position={[0,.01,0]}>
     {rings.map((r,i) => <mesh key={r} rotation={[-Math.PI/2,0,0]}>
-      <ringGeometry args={[r-.012,r+.012,128]} />
+      <ringGeometry args={[r-.012,r+.012,MOBILE ? 48 : 96]} />
       <meshBasicMaterial color={i < 2 ? '#9eabbc' : '#b8c3d0'} transparent opacity={i < 2 ? .36 : .24} />
     </mesh>)}
     {Array.from({length:8}).map((_,i)=>{
       const a=i/8*Math.PI*2
-      return <group key={i}>
-        <mesh position={[Math.cos(a)*5, .01, Math.sin(a)*5]} rotation={[-Math.PI/2,0,0]}>
-          <ringGeometry args={[.105,.15,32]} />
-          <meshBasicMaterial color="#1769ff" />
-        </mesh>
-      </group>
+      return <mesh key={i} position={[Math.cos(a)*5, .01, Math.sin(a)*5]} rotation={[-Math.PI/2,0,0]}>
+        <ringGeometry args={[.105,.15,MOBILE ? 16 : 24]} />
+        <meshBasicMaterial color="#1769ff" />
+      </mesh>
     })}
   </group>
 }
@@ -76,15 +74,16 @@ function Tower({ progress }) {
 }
 
 function Scene({ progress }) {
-  return <Canvas shadows dpr={[1,2]} camera={{ position:[8.8,5.7,9.2], fov:32 }}>
+  const camera = MOBILE
+    ? { position:[10.8,6.5,11.2], fov:34 }
+    : { position:[9.6,6.2,10], fov:32 }
+  return <Canvas dpr={MOBILE ? 1 : [1,1.5]} gl={{ antialias: !MOBILE, powerPreference:'high-performance' }} camera={camera} frameloop="demand">
     <color attach="background" args={['#f6f8fb']} />
-    <ambientLight intensity={1.6}/>
-    <directionalLight position={[6,10,7]} intensity={3.4} castShadow />
-    <directionalLight position={[-6,4,-4]} intensity={1.5} color="#83b7ff" />
+    <ambientLight intensity={1.8}/>
+    <directionalLight position={[6,10,7]} intensity={3.1} />
+    <directionalLight position={[-6,4,-4]} intensity={1.25} color="#83b7ff" />
     <Tower progress={progress}/>
-    <ContactShadows position={[0,-.04,0]} opacity={.22} scale={13} blur={2.7} far={7}/>
-    <Environment preset="studio" />
-    <OrbitControls makeDefault target={[0,1.25,0]} minDistance={8} maxDistance={18} enablePan={false} minPolarAngle={.62} maxPolarAngle={1.28}/>
+    <OrbitControls makeDefault target={[0,1.7,0]} minDistance={MOBILE ? 11 : 9} maxDistance={20} enablePan={false} enableDamping={false} minPolarAngle={.66} maxPolarAngle={1.25}/>
   </Canvas>
 }
 
