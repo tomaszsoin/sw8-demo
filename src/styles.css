@@ -6,15 +6,16 @@ main{position:absolute;inset:0;background:#f7f7f7;overflow:hidden}
 .backgroundFx{position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse at 50% 47%,rgba(255,255,255,.34) 0%,rgba(247,247,247,.06) 38%,rgba(232,233,236,.20) 62%,rgba(190,193,200,.58) 100%)}
 .backgroundFx::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,transparent 46%,rgba(182,185,192,.10) 68%,rgba(152,156,166,.26) 100%);mix-blend-mode:multiply}
 .backgroundFx::after{content:"";position:absolute;inset:0;opacity:.10;mix-blend-mode:multiply;background-size:96px 96px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.88' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.82'/%3E%3C/svg%3E")}
-.scene{position:absolute;left:0;top:0;bottom:0;width:100%;z-index:1;transition:width .62s cubic-bezier(.22,.78,.2,1)}
+
+.visualStage{position:absolute;inset:0;z-index:1;transform:translate3d(0,0,0);transition:transform .68s cubic-bezier(.20,.82,.20,1);will-change:transform}
+.detailOpen .visualStage{transform:translate3d(-16.4vw,0,0)}
+.scene{position:absolute;inset:0;z-index:1}
 .scene canvas{touch-action:none}
-.hudScreen{position:absolute;left:0;top:0;bottom:0;width:100%;overflow:hidden;pointer-events:none;z-index:4;transition:width .62s cubic-bezier(.22,.78,.2,1)}
-.sceneGlow{position:absolute;z-index:2;pointer-events:none;border-radius:999px;filter:blur(34px);mix-blend-mode:screen;transition:left .62s cubic-bezier(.22,.78,.2,1),transform .62s cubic-bezier(.22,.78,.2,1)}
+.hudScreen{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:4}
+.sceneGlow{position:absolute;z-index:2;pointer-events:none;border-radius:999px;filter:blur(34px);mix-blend-mode:screen}
 .glowA{width:34vw;height:22vw;min-width:220px;min-height:145px;left:49%;top:61%;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(21,58,199,.12) 0%,rgba(63,96,216,.045) 42%,rgba(255,255,255,0) 72%);opacity:.38}
 .glowB{width:22vw;height:16vw;min-width:160px;min-height:110px;left:58%;top:55%;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(21,58,199,.08) 0%,rgba(255,255,255,0) 72%);opacity:.28}
-.detailOpen .scene,.detailOpen .hudScreen{width:66.6667vw}
-.detailOpen .glowA{left:33%}
-.detailOpen .glowB{left:40%}
+
 header{position:absolute;left:34px;top:32px;pointer-events:none;z-index:5}
 .micro{font-size:10px;letter-spacing:.22em;color:#8591a1;margin-bottom:13px}
 h1{font-size:34px;line-height:.96;letter-spacing:-.04em;margin:0 0 14px;font-weight:650}
@@ -34,13 +35,11 @@ aside{position:absolute;left:34px;bottom:82px;width:330px;padding:15px;backgroun
 .speedControl{padding:9px 10px 10px;border:1px solid #e0e6ee;border-radius:10px;background:rgba(249,249,251,.84);margin-bottom:12px}
 .speedControl>div{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
 .speedControl span,.speedControl b,.speedControl small{font-size:8px;letter-spacing:.08em;color:#66758a}
-.speedControl b{font-weight:600}
-.speedControl small{display:block;margin-top:3px;color:#95a0af}
-.speedControl input{width:100%}
+.speedControl b{font-weight:600}.speedControl small{display:block;margin-top:3px;color:#95a0af}.speedControl input{width:100%}
 label{display:grid;grid-template-columns:100px 1fr 32px;align-items:center;gap:7px;margin:7px 0}
-label span,label b{font-size:8px;letter-spacing:.06em;color:#657287}
-label b{text-align:right;font-weight:500}
+label span,label b{font-size:8px;letter-spacing:.06em;color:#657287}label b{text-align:right;font-weight:500}
 input[type=range]{width:100%;accent-color:#153ac7}
+
 .hudLeaders{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
 .hudLeaders line{stroke:#153ac7;stroke-opacity:.58;stroke-width:.75;vector-effect:non-scaling-stroke}
 .hudLabel{position:absolute;left:0;top:0;display:flex;align-items:flex-start;gap:6px;width:max-content;max-width:132px;will-change:transform,opacity;color:#314158;text-shadow:0 1px 0 rgba(255,255,255,.96)}
@@ -50,32 +49,35 @@ input[type=range]{width:100%;accent-color:#153ac7}
 .hudLabel[data-side="left"] .hudLabelCopy{text-align:right;align-items:flex-end}
 .hudLabelCopy strong{font-size:5.8px;letter-spacing:.11em;line-height:1.2;color:#4d5d72;text-transform:uppercase;white-space:normal;max-width:92px}
 .hudLabelCopy span{font-size:5.6px;letter-spacing:.08em;color:#93a0b0}
-.hudLabelBars{display:flex;gap:2px;margin-top:2px}
-.hudLabel[data-side="left"] .hudLabelBars{justify-content:flex-end}
+.hudLabelBars{display:flex;gap:2px;margin-top:2px}.hudLabel[data-side="left"] .hudLabelBars{justify-content:flex-end}
 .hudLabelBars i{display:block;width:4px;height:4px;border:1px solid #d8dce4;background:rgba(255,255,255,.64)}
 .hudLabelBars i.on{border-color:#153ac7;background:#153ac7}
 .hudLabel,.hudLeaders line{transition:opacity .12s linear}
-.hoverPanel{position:absolute;right:34px;top:34px;width:330px;height:238px;padding:18px 20px;border:1px solid rgba(145,162,185,.28);border-radius:18px;background:rgba(255,255,255,.86);backdrop-filter:blur(20px);box-shadow:0 24px 72px rgba(60,80,110,.10);z-index:12;pointer-events:none;overflow:hidden;transition:top .58s cubic-bezier(.22,.78,.2,1),right .58s cubic-bezier(.22,.78,.2,1),width .58s cubic-bezier(.22,.78,.2,1),height .58s cubic-bezier(.22,.78,.2,1),border-radius .58s cubic-bezier(.22,.78,.2,1),padding .58s cubic-bezier(.22,.78,.2,1),background .35s ease,box-shadow .35s ease}
-.hoverPanel.isExpanded{top:24px;right:24px;width:calc(33.333vw - 36px);height:calc(100vh - 48px);padding:28px 30px 30px;border-radius:20px;background:rgba(249,249,250,.95);backdrop-filter:blur(30px);box-shadow:-20px 18px 70px rgba(48,61,89,.11);pointer-events:auto;overflow-y:auto;scrollbar-width:thin}
-.detailClose{position:absolute;right:18px;top:18px;width:30px;height:30px;border:1px solid rgba(130,143,160,.22);border-radius:999px;background:rgba(255,255,255,.74);color:#4b586b;font-size:18px;line-height:1;display:grid;place-items:center;cursor:pointer}
+
+.hoverPanel{position:absolute;right:34px;top:34px;width:342px;height:272px;padding:18px 20px;border:1px solid rgba(145,162,185,.28);border-radius:18px;background:rgba(255,255,255,.88);backdrop-filter:blur(20px);box-shadow:0 24px 72px rgba(60,80,110,.10);z-index:12;pointer-events:none;overflow:hidden;opacity:0;transform:translate3d(0,-7px,0) scale(.988);transform-origin:top right;will-change:top,right,width,height,padding,transform,opacity;transition:top .66s cubic-bezier(.20,.82,.20,1),right .66s cubic-bezier(.20,.82,.20,1),width .66s cubic-bezier(.20,.82,.20,1),height .66s cubic-bezier(.20,.82,.20,1),border-radius .66s cubic-bezier(.20,.82,.20,1),padding .66s cubic-bezier(.20,.82,.20,1),transform .46s cubic-bezier(.20,.82,.20,1),opacity .20s ease,background .35s ease,box-shadow .35s ease}
+.hoverPanel.isVisible{opacity:1;transform:translate3d(0,0,0) scale(1)}
+.hoverPanel.isExpanded{top:24px;right:24px;width:calc(33.333vw - 36px);height:calc(100vh - 48px);padding:28px 30px 30px;border-radius:20px;background:rgba(249,249,250,.955);backdrop-filter:blur(30px);box-shadow:-20px 18px 70px rgba(48,61,89,.11);pointer-events:auto;overflow-y:auto;scrollbar-width:thin}
+.detailClose{position:absolute;right:18px;top:18px;width:30px;height:30px;border:1px solid rgba(130,143,160,.22);border-radius:999px;background:rgba(255,255,255,.74);color:#4b586b;font-size:18px;line-height:1;display:grid;place-items:center;cursor:pointer;opacity:0;transform:scale(.86) rotate(-12deg);pointer-events:none;transition:opacity .20s ease .20s,transform .35s cubic-bezier(.2,.8,.2,1) .16s}
+.hoverPanel.isExpanded .detailClose{opacity:1;transform:scale(1) rotate(0);pointer-events:auto}
 .hoverPanelMicro{font-size:8px;letter-spacing:.15em;color:#8a96a6;margin-bottom:10px}
-.hoverPanel h3{margin:0 0 8px;font-size:20px;line-height:1.04;letter-spacing:-.025em;color:#263247}
-.hoverQuestion{margin:0 0 13px;font-size:10.5px;line-height:1.48;color:#69788d;max-width:290px}
-.hoverFacts{display:flex;gap:18px;padding-top:10px;border-top:1px solid rgba(160,174,192,.22)}
-.hoverFacts span{font-size:7.5px;line-height:1.35;letter-spacing:.035em;color:#8793a3}
-.hoverFacts b{display:block;margin-top:2px;font-size:9.5px;font-weight:600;color:#40506a}
-.hoverFacts span:nth-child(2) b{color:#153ac7}
+.hoverPanel h3{margin:0 0 10px;font-size:20px;line-height:1.04;letter-spacing:-.025em;color:#263247}
+.compactBlockInfo{margin:0 0 12px;padding:10px 11px 11px;border:1px solid rgba(21,58,199,.105);border-radius:11px;background:rgba(21,58,199,.026)}
+.compactBlockLabel{font-size:6.7px;font-weight:650;letter-spacing:.13em;color:#153ac7;margin-bottom:5px}
+.compactBlockTitle{font-size:10.5px;line-height:1.28;font-weight:650;color:#34435a;margin-bottom:4px}
+.compactBlockInfo p{margin:0;font-size:8.7px;line-height:1.43;color:#728094}
+.hoverFacts{display:flex;gap:15px;padding-top:10px;border-top:1px solid rgba(160,174,192,.22)}
+.hoverFacts span{font-size:7.2px;line-height:1.35;letter-spacing:.035em;color:#8793a3}
+.hoverFacts b{display:block;margin-top:2px;font-size:9px;font-weight:600;color:#40506a}.hoverFacts span:nth-child(2) b{color:#153ac7}
 .hoverPanel.isExpanded .hoverPanelMicro{margin-top:2px;margin-bottom:11px;font-size:8px}
-.hoverPanel.isExpanded h3{font-size:22px;margin-bottom:9px;padding-right:38px}
-.hoverPanel.isExpanded .hoverQuestion{font-size:11px;line-height:1.5;margin-bottom:14px;max-width:440px}
-.hoverPanel.isExpanded .hoverFacts{padding-top:12px;gap:22px;flex-wrap:wrap}
-.hoverPanel.isExpanded .hoverFacts span{font-size:7.5px}
-.hoverPanel.isExpanded .hoverFacts b{font-size:9.5px}
-.detailBody{margin-top:22px;padding-top:18px;border-top:1px solid rgba(150,164,183,.20)}
+.hoverPanel.isExpanded h3{font-size:22px;margin-bottom:10px;padding-right:38px}
+.hoverPanel.isExpanded .compactBlockInfo{padding:11px 12px 12px;margin-bottom:14px}
+.hoverPanel.isExpanded .compactBlockTitle{font-size:11px}.hoverPanel.isExpanded .compactBlockInfo p{font-size:9px;max-width:430px}
+.hoverPanel.isExpanded .hoverFacts{padding-top:12px;gap:22px;flex-wrap:wrap}.hoverPanel.isExpanded .hoverFacts span{font-size:7.5px}.hoverPanel.isExpanded .hoverFacts b{font-size:9.5px}
+.detailBody{margin-top:22px;padding-top:18px;border-top:1px solid rgba(150,164,183,.20);opacity:0;transform:translate3d(0,12px,0);pointer-events:none;transition:opacity .28s ease .08s,transform .42s cubic-bezier(.2,.8,.2,1) .08s}
+.hoverPanel.isExpanded .detailBody{opacity:1;transform:translate3d(0,0,0);pointer-events:auto;transition-delay:.24s}
 .detailSection{margin:0 0 22px}
 .detailSectionLabel{margin:0 0 7px;font-size:7.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8d98a8}
-.detailSectionHeader{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
-.detailSectionHeader .detailSectionLabel{margin:0}
+.detailSectionHeader{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}.detailSectionHeader .detailSectionLabel{margin:0}
 .detailBody p{margin:0;font-size:10.5px;line-height:1.6;color:#5f6f84}
 .foundationCard,.completionCard{padding:13px 14px;border:1px solid rgba(21,58,199,.12);border-radius:12px;background:rgba(21,58,199,.025)}
 .foundationCard h4{margin:0 0 6px;font-size:11.5px;line-height:1.3;color:#293a59}
@@ -84,48 +86,21 @@ input[type=range]{width:100%;accent-color:#153ac7}
 .strategicBlocks{display:flex;flex-direction:column;border-top:1px solid rgba(151,164,182,.16)}
 .strategicBlockRow{display:grid;grid-template-columns:26px 1fr;gap:9px;padding:10px 0;border-bottom:1px solid rgba(151,164,182,.14)}
 .strategicBlockIndex{font-size:7px;letter-spacing:.08em;color:#a0a9b6;padding-top:2px}
-.strategicBlockTitle{font-size:9.5px;line-height:1.35;font-weight:650;color:#34435a}
-.strategicBlockTitle span{margin-left:5px;font-size:5.8px;letter-spacing:.09em;color:#153ac7;font-weight:600}
+.strategicBlockTitle{font-size:9.5px;line-height:1.35;font-weight:650;color:#34435a}.strategicBlockTitle span{margin-left:5px;font-size:5.8px;letter-spacing:.09em;color:#153ac7;font-weight:600}
 .strategicBlockQuestion{margin-top:3px;font-size:8.5px;line-height:1.45;color:#798697}
 .projectionNote{margin-top:2px;padding:11px 12px;border-radius:10px;background:rgba(125,137,154,.06);font-size:8px;line-height:1.5;color:#8b96a5}
+
 @media(max-width:700px){
- header{left:18px;top:18px}
- h1{font-size:26px}
- header p{width:235px}
- .meta{display:none}
- .bottomControls{left:16px;bottom:16px;gap:7px}
- .controlToggle,.demoToggle{padding:10px 13px}
- .pauseToggle{width:37px;height:37px}
- .demoToggle{min-width:62px}
- .hint{right:16px;bottom:20px;font-size:8px}
- aside{left:12px;bottom:64px;width:calc(100vw - 24px);max-height:48vh;overflow:auto}
- .scene{top:72px;height:calc(100% - 72px)}
- .hudScreen{top:72px;height:calc(100% - 72px)}
- .hudLabel{max-width:104px;gap:5px}
- .hudLabelNum{font-size:10px}
- .hudLabelCopy{min-width:66px;max-width:86px}
- .hudLabelCopy strong{font-size:5.2px}
- .hudLabelCopy span{font-size:5px}
- .hudLabelBars i{width:3.5px;height:3.5px}
- .hoverPanel{right:12px;top:84px;width:218px;height:196px;padding:14px 15px}
- .hoverPanelMicro{font-size:7px;margin-bottom:8px}
- .hoverPanel h3{font-size:16px}
- .hoverQuestion{font-size:9.5px;margin-bottom:10px}
- .hoverFacts{gap:10px;padding-top:8px}
- .hoverFacts span{font-size:6.8px}
- .hoverFacts b{font-size:8.5px}
+ header{left:18px;top:18px}h1{font-size:26px}header p{width:235px}.meta{display:none}
+ .bottomControls{left:16px;bottom:16px;gap:7px}.controlToggle,.demoToggle{padding:10px 13px}.pauseToggle{width:37px;height:37px}.demoToggle{min-width:62px}
+ .hint{right:16px;bottom:20px;font-size:8px}aside{left:12px;bottom:64px;width:calc(100vw - 24px);max-height:48vh;overflow:auto}
+ .scene{top:72px;height:calc(100% - 72px)}.hudScreen{top:72px;height:calc(100% - 72px)}
+ .detailOpen .visualStage{transform:translate3d(-32vw,0,0)}
+ .hudLabel{max-width:104px;gap:5px}.hudLabelNum{font-size:10px}.hudLabelCopy{min-width:66px;max-width:86px}.hudLabelCopy strong{font-size:5.2px}.hudLabelCopy span{font-size:5px}.hudLabelBars i{width:3.5px;height:3.5px}
+ .hoverPanel{right:12px;top:84px;width:232px;height:244px;padding:14px 15px}
+ .hoverPanelMicro{font-size:7px;margin-bottom:8px}.hoverPanel h3{font-size:16px}.compactBlockTitle{font-size:9.5px}.compactBlockInfo p{font-size:8.2px}.hoverFacts{gap:10px;padding-top:8px}.hoverFacts span{font-size:6.6px}.hoverFacts b{font-size:8.3px}
  .hoverPanel.isExpanded{top:12px;right:12px;width:calc(88vw - 12px);height:calc(100vh - 24px);padding:54px 20px 24px;border-radius:18px}
- .hoverPanel.isExpanded h3{font-size:20px}
- .hoverPanel.isExpanded .hoverQuestion{font-size:10.5px}
- .detailClose{right:14px;top:14px}
- .detailOpen .scene,.detailOpen .hudScreen{width:42vw}
- .detailOpen .glowA{left:20%}
- .detailOpen .glowB{left:25%}
- .detailBody{margin-top:17px;padding-top:15px}
- .detailBody p{font-size:9.5px}
- .strategicBlockTitle{font-size:9px}
- .strategicBlockQuestion{font-size:8px}
- .glowA{width:58vw;height:38vw;top:63%;filter:blur(28px)}
- .glowB{width:42vw;height:28vw;top:57%;filter:blur(24px)}
- label{grid-template-columns:86px 1fr 30px}
+ .hoverPanel.isExpanded h3{font-size:20px}.hoverPanel.isExpanded .compactBlockInfo p{font-size:8.7px}.detailClose{right:14px;top:14px}
+ .detailBody{margin-top:17px;padding-top:15px}.detailBody p{font-size:9.5px}.strategicBlockTitle{font-size:9px}.strategicBlockQuestion{font-size:8px}
+ .glowA{width:58vw;height:38vw;top:63%;filter:blur(28px)}.glowB{width:42vw;height:28vw;top:57%;filter:blur(24px)}label{grid-template-columns:86px 1fr 30px}
 }
