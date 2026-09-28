@@ -86,25 +86,24 @@ function makeInstancedGeometry(){
  return g
 }
 
-function makeAllOutlineGeometry(){
+function makeGhostOutlineGeometry(progress){
  const base=makeGeometry()
  const edges=new THREE.EdgesGeometry(base,24)
  const src=edges.getAttribute('position')
- const positions=new Float32Array(src.count*8*MAX*3)
+ const positions=[]
  const v=new THREE.Vector3(),m=new THREE.Matrix4(),rot=new THREE.Matrix4(),move=new THREE.Matrix4()
- let o=0
- for(let area=0;area<8;area++)for(let level=0;level<MAX;level++){
+ for(let area=0;area<8;area++)for(let level=progress[area];level<MAX;level++){
   rot.makeRotationY(area*Math.PI/4)
   move.makeTranslation(0,level*STEP,0)
   m.multiplyMatrices(move,rot)
   for(let i=0;i<src.count;i++){
    v.fromBufferAttribute(src,i).applyMatrix4(m)
-   positions[o++]=v.x;positions[o++]=v.y;positions[o++]=v.z
+   positions.push(v.x,v.y,v.z)
   }
  }
  base.dispose();edges.dispose()
  const g=new THREE.BufferGeometry()
- g.setAttribute('position',new THREE.BufferAttribute(positions,3))
+ g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3))
  return g
 }
 
@@ -188,10 +187,13 @@ function GlassTower({progress,transitions,highlighted,setHovered,setSelected}){
  </>
 }
 
-function BlockOutlines(){
- const geo=useMemo(makeAllOutlineGeometry,[])
- return <lineSegments geometry={geo} raycast={()=>{}} frustumCulled={false} renderOrder={3}>
-  <lineBasicMaterial color="#8b919d" transparent opacity={.15} depthWrite={false} toneMapped={false}/>
+function GhostOutlines({progress}){
+ const ref=useRef()
+ const geo=useMemo(()=>makeGhostOutlineGeometry(progress),[progress])
+ useLayoutEffect(()=>{if(ref.current)ref.current.computeLineDistances()},[geo])
+ useEffect(()=>()=>geo.dispose(),[geo])
+ return <lineSegments ref={ref} geometry={geo} raycast={()=>{}} frustumCulled={false} renderOrder={3}>
+  <lineDashedMaterial color="#8b919d" transparent opacity={.24} depthWrite={false} toneMapped={false} dashSize={.075} gapSize={.065}/>
  </lineSegments>
 }
 
@@ -339,25 +341,49 @@ function AmbientOcclusion(){return <mesh rotation={[-Math.PI/2,0,0]} position={[
  <shaderMaterial vertexShader={aoVertex} fragmentShader={aoFragment} transparent depthWrite={false} depthTest={false}/>
  </mesh>}
 
-function CameraControls({targetY,rotating,speed,onUserStart,onUserEnd}){
- const {invalidate}=useThree()
+function CameraControls({targetY,rotating,speed,onUserStart,onUserEnd,detailOpen}){
+ const controls=useRef()
+ const shift=useRef(0)
+ const {camera,invalidate}=useThree()
+ const desiredShift=detailOpen?(MOBILE?1.7:3.25):0
+
+ useEffect(()=>{invalidate()},[detailOpen,invalidate])
+ useFrame((_,delta)=>{
+  const next=THREE.MathUtils.damp(shift.current,desiredShift,5.2,delta)
+  const diff=next-shift.current
+  if(Math.abs(diff)>.0001){
+   camera.position.x+=diff
+   if(controls.current)controls.current.target.x+=diff
+   shift.current=next
+   controls.current?.update()
+   invalidate()
+  }else if(Math.abs(shift.current-desiredShift)>.00001){
+   const finalDiff=desiredShift-shift.current
+   camera.position.x+=finalDiff
+   if(controls.current)controls.current.target.x+=finalDiff
+   shift.current=desiredShift
+   controls.current?.update()
+   invalidate()
+  }
+ })
+
  return <OrbitControls
-  makeDefault target={[0,targetY,0]} minDistance={MOBILE?12.5:9.5} maxDistance={MAX_DIST}
+  ref={controls} makeDefault target={[0,targetY,0]} minDistance={MOBILE?12.5:9.5} maxDistance={MAX_DIST}
   enablePan={false} enableDamping={false} minPolarAngle={.72} maxPolarAngle={1.17}
   autoRotate={rotating} autoRotateSpeed={speed}
   onStart={onUserStart} onEnd={onUserEnd} onChange={invalidate}
  />
 }
 
-function Scene({progress,transitions,highlighted,setHovered,setSelected,rotating,speed,onUserStart,onUserEnd,hudLabels,hudLines}){
+function Scene({progress,transitions,highlighted,setHovered,setSelected,rotating,speed,onUserStart,onUserEnd,hudLabels,hudLines,detailOpen}){
  const targetY=MOBILE?2.55:2.25
  const target=new THREE.Vector3(0,targetY,0),dir=new THREE.Vector3(1,.46,1.04).normalize(),pos=target.clone().add(dir.multiplyScalar(MAX_DIST))
  const camera={position:pos.toArray(),fov:MOBILE?27:29}
  return <Canvas dpr={MOBILE?[1,1.5]:[1,1.7]} gl={{antialias:true,powerPreference:'high-performance',alpha:true}} onCreated={({gl})=>gl.setClearColor(0x000000,0)} camera={camera} frameloop={rotating||transitions.length?'always':'demand'} onPointerMissed={()=>setHovered(null)}>
   <GroundDotField/><Floor/><AmbientOcclusion/><Blueprint/>
   <GlassTower progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected}/>
-  <BlockOutlines/><TransitionBlocks transitions={transitions}/><HudTracker labels={hudLabels} lines={hudLines}/>
-  <CameraControls targetY={targetY} rotating={rotating} speed={speed} onUserStart={onUserStart} onUserEnd={onUserEnd}/>
+  <GhostOutlines progress={progress}/><TransitionBlocks transitions={transitions}/><HudTracker labels={hudLabels} lines={hudLines}/>
+  <CameraControls targetY={targetY} rotating={rotating} speed={speed} onUserStart={onUserStart} onUserEnd={onUserEnd} detailOpen={detailOpen}/>
  </Canvas>
 }
 
@@ -384,14 +410,14 @@ function DetailPanel({block,expanded,visible,onClose}){
   <div className="hoverPanelMicro">OBSZAR {String(safeBlock.area+1).padStart(2,'0')} · SEGMENT {String(safeBlock.level+1).padStart(2,'0')}</div>
   <h3>{area.name}</h3>
   <div className="compactBlockInfo">
-   <div className="compactBlockLabel">{segment.projection?'PROJEKCJA OBSZARU':'KLOCEK STRATEGICZNY'}{segment.foundation?' · FOUNDATION':''}</div>
+   {(segment.projection||segment.foundation)&&<div className="compactBlockLabel">{segment.projection?'PROJEKCJA OBSZARU':'FUNDAMENT'}</div>}
    <div className="compactBlockTitle">{segment.title}</div>
    <p>{segment.summary}</p>
   </div>
   <div className="hoverFacts">
    <span>Segment wizualizacji <b>{safeBlock.level+1}/{MAX}</b></span>
    <span>Stan <b>{safeBlock.active?'zbudowany':'niewypełniony'}</b></span>
-   <span>Klocki strategiczne <b>{area.blocks.length}</b></span>
+   <span>Elementy <b>{area.blocks.length}</b></span>
   </div>
 
   <div className="detailBody">
@@ -406,27 +432,27 @@ function DetailPanel({block,expanded,visible,onClose}){
    </section>
 
    <section className="detailSection foundationCard">
-    <div className="detailSectionHeader"><div className="detailSectionLabel">Foundation Block</div><span className="foundationBadge">FOUNDATION</span></div>
+    <div className="detailSectionHeader"><div className="detailSectionLabel">Fundament</div><span className="foundationBadge">FUNDAMENT</span></div>
     <h4>{area.foundation.name}</h4>
     <p>{area.foundation.answer}</p>
    </section>
 
    <section className="detailSection">
-    <div className="detailSectionHeader"><div className="detailSectionLabel">Strategic Blocks v0.2</div><span className="blockCount">{area.blocks.length} required</span></div>
+    <div className="detailSectionHeader"><div className="detailSectionLabel">Elementy strategiczne</div><span className="blockCount">{area.blocks.length} wymaganych</span></div>
     <div className="strategicBlocks">
      {area.blocks.map((item,i)=><div className="strategicBlockRow" key={item[0]}>
       <div className="strategicBlockIndex">{String(i+1).padStart(2,'0')}</div>
-      <div className="strategicBlockContent"><div className="strategicBlockTitle">{item[0]} {item[2]&&<span>FOUNDATION</span>}</div><div className="strategicBlockQuestion">{item[1]}</div></div>
+      <div className="strategicBlockContent"><div className="strategicBlockTitle">{item[0]} {item[2]&&<span>FUNDAMENT</span>}</div><div className="strategicBlockQuestion">{item[1]}</div></div>
      </div>)}
     </div>
    </section>
 
    <section className="detailSection completionCard">
-    <div className="detailSectionLabel">Area readiness</div>
+    <div className="detailSectionLabel">Gotowość obszaru</div>
     <p>{area.completion}</p>
    </section>
 
-   <div className="projectionNote">Wieża jest projekcją modelu. SW8 v0.2 nie wymusza równej liczby Strategic Blocks w każdym obszarze, dlatego 6 poziomów tej wersji demo nie jest mapowaniem 1:1 na kanoniczne Blocki.</div>
+   <div className="projectionNote">Wieża jest projekcją modelu. SW8 v0.2 nie wymusza równej liczby elementów strategicznych w każdym obszarze, dlatego 6 poziomów tej wersji demo nie jest mapowaniem 1:1 na kanoniczne elementy.</div>
   </div>
  </div>
 }
@@ -514,7 +540,7 @@ function App(){
   <div className="backgroundFx"/>
 
   <div className="visualStage">
-   <div className="scene"><Scene progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected} rotating={rotating} speed={rotationSpeed} onUserStart={handleUserStart} onUserEnd={handleUserEnd} hudLabels={hudLabels} hudLines={hudLines}/></div>
+   <div className="scene"><Scene progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected} rotating={rotating} speed={rotationSpeed} onUserStart={handleUserStart} onUserEnd={handleUserEnd} hudLabels={hudLabels} hudLines={hudLines} detailOpen={!!selected}/></div>
    <div className="sceneGlow glowA"/><div className="sceneGlow glowB"/>
    <div className="hudScreen" aria-hidden="true">
     <svg className="hudLeaders">{AREAS.map((_,i)=><line key={i} ref={el=>hudLines.current[i]=el}/>)}</svg>
@@ -529,7 +555,7 @@ function App(){
    </div>
   </div>
 
-  <header><div className="micro">SW8 / MODEL 20</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
+  <header><div className="micro">SW8 / MODEL 21</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
   {!detailBlock&&<div className="meta">FROSTED GLASS / HUD SYSTEM<br/>8 OBSZARÓW / 6 POZIOMÓW</div>}
 
   <DetailPanel block={detailBlock} expanded={!!selected} visible={!!detailBlock} onClose={()=>{setSelected(null);setHovered(null)}}/>
