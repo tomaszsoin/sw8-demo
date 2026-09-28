@@ -14,16 +14,19 @@ THREE.MeshPhysicalMaterial.prototype.setValues = function(values){
   return originalPhysicalSetValues.call(this,values)
 }
 
-// Give unfinished blocks a very light neutral fill so their volume remains readable,
-// while the dashed outline still carries the primary "not completed" state.
+// Give unfinished blocks a subtle cool-gray body that is readable against the
+// light scene background, while remaining much quieter than completed blocks.
 const originalShaderSetValues = THREE.ShaderMaterial.prototype.setValues
 THREE.ShaderMaterial.prototype.setValues = function(values){
   if(values && typeof values === 'object' && values.uniforms?.uGhost?.value>.5 && values.uniforms?.uOpacity){
+    const ghostSource='if(uGhost>.5){col=mix(vec3(.955,.958,.968),uBlue,.075);col=mix(col,vec3(1.0),top*.08+edge*.11);}'
+    const ghostFill='if(uGhost>.5){col=mix(vec3(.84,.86,.90),uBlue,.18);col=mix(col,vec3(.97,.975,.985),top*.05+edge*.08);}'
     values={
       ...values,
+      fragmentShader:typeof values.fragmentShader==='string'?values.fragmentShader.replace(ghostSource,ghostFill):values.fragmentShader,
       uniforms:{
         ...values.uniforms,
-        uOpacity:{...values.uniforms.uOpacity,value:.08},
+        uOpacity:{...values.uniforms.uOpacity,value:.16},
       },
     }
   }
