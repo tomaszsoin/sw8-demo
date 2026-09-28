@@ -87,21 +87,44 @@ function makeInstancedGeometry(){
 }
 
 function makeGhostOutlineGeometry(progress){
- const base=makeGeometry()
- const edges=new THREE.EdgesGeometry(base,24)
- const src=edges.getAttribute('position')
  const positions=[]
- const v=new THREE.Vector3(),m=new THREE.Matrix4(),rot=new THREE.Matrix4(),move=new THREE.Matrix4()
- for(let area=0;area<8;area++)for(let level=progress[area];level<MAX;level++){
-  rot.makeRotationY(area*Math.PI/4)
-  move.makeTranslation(0,level*STEP,0)
-  m.multiplyMatrices(move,rot)
-  for(let i=0;i<src.count;i++){
-   v.fromBufferAttribute(src,i).applyMatrix4(m)
-   positions.push(v.x,v.y,v.z)
-  }
+ const seen=new Set()
+ const arcSteps=MOBILE?10:14
+ const a0=-Math.PI/8+.006,a1=Math.PI/8-.006
+ const keyPoint=(x,y,z)=>`${Math.round(x*10000)},${Math.round(y*10000)},${Math.round(z*10000)}`
+ const addSegment=(x1,y1,z1,x2,y2,z2)=>{
+  const p1=keyPoint(x1,y1,z1),p2=keyPoint(x2,y2,z2)
+  const key=p1<p2?`${p1}|${p2}`:`${p2}|${p1}`
+  if(seen.has(key))return
+  seen.add(key)
+  positions.push(x1,y1,z1,x2,y2,z2)
  }
- base.dispose();edges.dispose()
+ const point=(r,a,y)=>[Math.cos(a)*r,y,Math.sin(a)*r]
+
+ for(let area=0;area<8;area++)for(let level=progress[area];level<MAX;level++){
+  const center=area*Math.PI/4
+  const start=center+a0,end=center+a1
+  const y0=level*STEP,y1=y0+H
+
+  for(const r of [INNER,OUTER]){
+   for(const y of [y0,y1]){
+    for(let s=0;s<arcSteps;s++){
+     const aa=THREE.MathUtils.lerp(start,end,s/arcSteps)
+     const ab=THREE.MathUtils.lerp(start,end,(s+1)/arcSteps)
+     const p=point(r,aa,y),q=point(r,ab,y)
+     addSegment(...p,...q)
+    }
+   }
+  }
+
+  const inner0=point(INNER,start,y0),outer0=point(OUTER,start,y0)
+  const inner1=point(INNER,start,y1),outer1=point(OUTER,start,y1)
+  addSegment(...inner0,...outer0)
+  addSegment(...inner1,...outer1)
+  addSegment(...inner0,...inner1)
+  addSegment(...outer0,...outer1)
+ }
+
  const g=new THREE.BufferGeometry()
  g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3))
  return g
@@ -343,28 +366,29 @@ function AmbientOcclusion(){return <mesh rotation={[-Math.PI/2,0,0]} position={[
 
 function CameraControls({targetY,rotating,speed,onUserStart,onUserEnd,detailOpen}){
  const controls=useRef()
- const shift=useRef(0)
- const {camera,invalidate}=useThree()
- const desiredShift=detailOpen?(MOBILE?1.7:3.25):0
+ const offset=useRef(0)
+ const {camera,size,invalidate}=useThree()
+ const desiredOffset=detailOpen?(MOBILE?size.width*.28:size.width*.17):0
 
- useEffect(()=>{invalidate()},[detailOpen,invalidate])
+ useEffect(()=>{invalidate()},[detailOpen,size.width,size.height,invalidate])
+ useEffect(()=>()=>{
+  camera.clearViewOffset()
+  camera.updateProjectionMatrix()
+ },[camera])
+
  useFrame((_,delta)=>{
-  const next=THREE.MathUtils.damp(shift.current,desiredShift,5.2,delta)
-  const diff=next-shift.current
-  if(Math.abs(diff)>.0001){
-   camera.position.x+=diff
-   if(controls.current)controls.current.target.x+=diff
-   shift.current=next
-   controls.current?.update()
-   invalidate()
-  }else if(Math.abs(shift.current-desiredShift)>.00001){
-   const finalDiff=desiredShift-shift.current
-   camera.position.x+=finalDiff
-   if(controls.current)controls.current.target.x+=finalDiff
-   shift.current=desiredShift
-   controls.current?.update()
-   invalidate()
+  const next=THREE.MathUtils.damp(offset.current,desiredOffset,4.15,delta)
+  const moving=Math.abs(next-offset.current)>.0005||Math.abs(next-desiredOffset)>.08
+  offset.current=next
+
+  if(Math.abs(offset.current)<.05&&!detailOpen){
+   if(camera.view){camera.clearViewOffset();camera.updateProjectionMatrix()}
+  }else{
+   camera.setViewOffset(size.width,size.height,offset.current,0,size.width,size.height)
+   camera.updateProjectionMatrix()
   }
+
+  if(moving)invalidate()
  })
 
  return <OrbitControls
@@ -379,7 +403,7 @@ function Scene({progress,transitions,highlighted,setHovered,setSelected,rotating
  const targetY=MOBILE?2.55:2.25
  const target=new THREE.Vector3(0,targetY,0),dir=new THREE.Vector3(1,.46,1.04).normalize(),pos=target.clone().add(dir.multiplyScalar(MAX_DIST))
  const camera={position:pos.toArray(),fov:MOBILE?27:29}
- return <Canvas dpr={MOBILE?[1,1.5]:[1,1.7]} gl={{antialias:true,powerPreference:'high-performance',alpha:true}} onCreated={({gl})=>gl.setClearColor(0x000000,0)} camera={camera} frameloop={rotating||transitions.length?'always':'demand'} onPointerMissed={()=>setHovered(null)}>
+ return <Canvas dpr={MOBILE?[1,1.5]:[1,1.7]} gl={{antialias:true,powerPreference:'high-performance',alpha:true}} onCreated={({gl})=>gl.setClearColor(0x000000,0)} camera={camera} frameloop={rotating||transitions.length?'always':'demand'} onPointerMissed={()=>{setHovered(null);setSelected(null)}}>
   <GroundDotField/><Floor/><AmbientOcclusion/><Blueprint/>
   <GlassTower progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected}/>
   <GhostOutlines progress={progress}/><TransitionBlocks transitions={transitions}/><HudTracker labels={hudLabels} lines={hudLines}/>
@@ -427,7 +451,7 @@ function DetailPanel({block,expanded,visible,onClose}){
    </section>
 
    <section className="detailSection">
-    <div className="detailSectionLabel">Outcome obszaru</div>
+    <div className="detailSectionLabel">Rezultat obszaru</div>
     <p>{area.outcome}</p>
    </section>
 
@@ -555,7 +579,7 @@ function App(){
    </div>
   </div>
 
-  <header><div className="micro">SW8 / MODEL 21</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
+  <header><div className="micro">SW8 / MODEL 22</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
   {!detailBlock&&<div className="meta">FROSTED GLASS / HUD SYSTEM<br/>8 OBSZARÓW / 6 POZIOMÓW</div>}
 
   <DetailPanel block={detailBlock} expanded={!!selected} visible={!!detailBlock} onClose={()=>{setSelected(null);setHovered(null)}}/>
