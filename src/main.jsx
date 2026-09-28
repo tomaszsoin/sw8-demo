@@ -3,19 +3,10 @@ import { createRoot } from 'react-dom/client'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
+import { SW8_AREAS } from './sw8Data.js'
 import './styles.css'
 
-const AREAS=['Dlaczego?','Kto?','Do kogo?','W jakim kontekście?','Co?','Jak?','Gdzie?','Kiedy?']
-const AREA_QUESTIONS=[
- 'Dlaczego podejmujemy ten kierunek i po co firma istnieje?',
- 'Kim jesteśmy jako marka i jaką tożsamość chcemy konsekwentnie wyrażać?',
- 'Do kogo świadomie kierujemy ofertę?',
- 'W jakiej przestrzeni rynkowej jesteśmy oceniani i jakie miejsce chcemy zajmować?',
- 'Co konkretnie oferujemy i jaką zmianę / wartość obiecujemy?',
- 'Jak prowadzimy odbiorcę od zainteresowania do decyzji i dalszej relacji?',
- 'W jakich kanałach powinniśmy być obecni?',
- 'Co robimy najpierw, co później i po czym wiemy, że można przejść dalej?'
-]
+const AREAS=SW8_AREAS.map(a=>a.name)
 const INITIAL=[3,5,4,2,4,3,5,3], MAX=6
 const MOBILE=typeof window!=='undefined'&&matchMedia('(max-width:700px)').matches
 const INNER=MOBILE?1.5:1.9, OUTER=MOBILE?2.72:3.65, H=MOBILE?1.02:.82, STEP=MOBILE?1.045:.845
@@ -317,6 +308,51 @@ function Scene({progress,transitions,highlighted,setHovered,setSelected,rotating
  </Canvas>
 }
 
+function DetailPanel({block,expanded,onClose}){
+ const area=SW8_AREAS[block.area]
+ return <div className={`hoverPanel ${expanded?'isExpanded':''}`}>
+  {expanded&&<button className="detailClose" onClick={onClose} aria-label="Zamknij panel">×</button>}
+  <div className="hoverPanelMicro">OBSZAR {String(block.area+1).padStart(2,'0')} · SEGMENT {String(block.level+1).padStart(2,'0')}</div>
+  <h3>{area.name}</h3>
+  <p className="hoverQuestion">{area.question}</p>
+  <div className="hoverFacts">
+   <span>Segment wizualizacji <b>{block.level+1}/{MAX}</b></span>
+   <span>Stan <b>{block.active?'zbudowany':'niewypełniony'}</b></span>
+   <span>Klocki strategiczne <b>{area.blocks.length}</b></span>
+  </div>
+
+  {expanded&&<div className="detailBody">
+   <section className="detailSection">
+    <div className="detailSectionLabel">Outcome obszaru</div>
+    <p>{area.outcome}</p>
+   </section>
+
+   <section className="detailSection foundationCard">
+    <div className="detailSectionHeader"><div className="detailSectionLabel">Foundation Block</div><span className="foundationBadge">FOUNDATION</span></div>
+    <h4>{area.foundation.name}</h4>
+    <p>{area.foundation.answer}</p>
+   </section>
+
+   <section className="detailSection">
+    <div className="detailSectionHeader"><div className="detailSectionLabel">Strategic Blocks v0.2</div><span className="blockCount">{area.blocks.length} required</span></div>
+    <div className="strategicBlocks">
+     {area.blocks.map((item,i)=><div className="strategicBlockRow" key={item[0]}>
+      <div className="strategicBlockIndex">{String(i+1).padStart(2,'0')}</div>
+      <div className="strategicBlockContent"><div className="strategicBlockTitle">{item[0]} {item[2]&&<span>FOUNDATION</span>}</div><div className="strategicBlockQuestion">{item[1]}</div></div>
+     </div>)}
+    </div>
+   </section>
+
+   <section className="detailSection completionCard">
+    <div className="detailSectionLabel">Area readiness</div>
+    <p>{area.completion}</p>
+   </section>
+
+   <div className="projectionNote">Wieża jest projekcją modelu. SW8 v0.2 nie wymusza równej liczby Strategic Blocks w każdym obszarze, dlatego 6 poziomów tej wersji demo nie jest mapowaniem 1:1 na kanoniczne Blocki.</div>
+  </div>}
+ </div>
+}
+
 function App(){
  const[progress,setProgress]=useState(INITIAL),[open,setOpen]=useState(false)
  const[paused,setPaused]=useState(false),[interactionHold,setInteractionHold]=useState(false),[rotationSpeed,setRotationSpeed]=useState(.35)
@@ -413,22 +449,10 @@ function App(){
    </div>)}
   </div>
 
-  <header><div className="micro">SW8 / MODEL 18</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
+  <header><div className="micro">SW8 / MODEL 19</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
   {!detailBlock&&<div className="meta">FROSTED GLASS / HUD SYSTEM<br/>8 OBSZARÓW / 6 POZIOMÓW</div>}
 
-  {detailBlock&&<div className={`hoverPanel ${selected?'isExpanded':''}`}>
-   {selected&&<button className="detailClose" onClick={()=>setSelected(null)} aria-label="Zamknij panel">×</button>}
-   <div className="hoverPanelMicro">OBSZAR {String(detailBlock.area+1).padStart(2,'0')} · BLOK {String(detailBlock.level+1).padStart(2,'0')}</div>
-   <h3>{AREAS[detailBlock.area]}</h3>
-   <p className="hoverQuestion">{AREA_QUESTIONS[detailBlock.area]}</p>
-   <div className="hoverFacts"><span>Poziom <b>{detailBlock.level+1}/{MAX}</b></span><span>Status <b>{detailBlock.active?'ukończony':'do zbudowania'}</b></span></div>
-   {selected&&<div className="detailBody">
-    <div className="detailSectionLabel">Pytanie strategiczne</div>
-    <p>{AREA_QUESTIONS[detailBlock.area]}</p>
-    <div className="detailSectionLabel">Pozycja w modelu</div>
-    <p>Obszar {detailBlock.area+1} z 8 · poziom {detailBlock.level+1} z {MAX}. Ten blok jest {detailBlock.active?'już zbudowany':'jeszcze niewypełniony'}.</p>
-   </div>}
-  </div>}
+  {detailBlock&&<DetailPanel block={detailBlock} expanded={!!selected} onClose={()=>setSelected(null)}/>} 
 
   <div className="bottomControls">
    <button className="pauseToggle" onClick={togglePause} aria-label={paused?'Włącz automatyczny obrót':'Zatrzymaj automatyczny obrót'} title={paused?'Play':'Pause'}>{paused?'▶':'Ⅱ'}</button>
