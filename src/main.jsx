@@ -11,6 +11,14 @@ const INITIAL=[3,5,4,2,4,3,5,3],MAX=6
 const MOBILE=typeof window!=='undefined'&&matchMedia('(max-width:700px)').matches
 const INNER=MOBILE?1.5:1.9,OUTER=MOBILE?2.72:3.65,H=MOBILE?1.02:.82,STEP=MOBILE?1.045:.845
 const MAX_DIST=MOBILE?26:27,NODE_R=OUTER+.86,OUTER_RING=NODE_R,BRAND='#153AC7'
+const PALE_BLUE='#edf3ff'
+
+function blockCompletion(area,level,progress){
+ if(level>=progress[area])return 0
+ const depth=progress[area]-level
+ return THREE.MathUtils.clamp(.38+depth*.18,.56,1)
+}
+function completionColor(value){return new THREE.Color(PALE_BLUE).lerp(new THREE.Color(BRAND),THREE.MathUtils.clamp(value,0,1))}
 
 const vertex=`
 attribute float instanceHover;
@@ -72,53 +80,77 @@ function makeGhostOutlineGeometry(progress){
  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));return g
 }
 
-function glassMaterial(ghost=false){return new THREE.ShaderMaterial({vertexShader:vertex,fragmentShader:fragment,transparent:true,depthWrite:!ghost,side:THREE.DoubleSide,uniforms:{uBlue:{value:new THREE.Color(ghost?'#d6d9e3':BRAND)},uBrand:{value:new THREE.Color(BRAND)},uIce:{value:new THREE.Color('#ffffff')},uLight:{value:new THREE.Vector3(-4,10,7)},uOpacity:{value:ghost?.046:.77},uGhost:{value:ghost?1:0}}})}
-function activeGlassMaterial(){return new THREE.MeshPhysicalMaterial({
- color:'#ffffff',metalness:0,roughness:MOBILE?.50:.42,transmission:MOBILE?.42:.64,thickness:MOBILE?.52:.68,ior:1.22,
- attenuationColor:new THREE.Color('#edf1ff'),attenuationDistance:9.5,clearcoat:.58,clearcoatRoughness:.24,
- specularIntensity:1,specularColor:new THREE.Color('#ffffff'),emissive:new THREE.Color(BRAND),emissiveIntensity:.018,
- side:THREE.DoubleSide,depthWrite:true,transparent:false
+function makeActiveGridGeometry(progress){
+ const positions=[],arcSteps=MOBILE?7:10,a0=-Math.PI/8+.012,a1=Math.PI/8-.012
+ const point=(r,a,y)=>[Math.cos(a)*r,y,Math.sin(a)*r]
+ const add=(a,b)=>positions.push(...a,...b)
+ for(let area=0;area<8;area++)for(let level=0;level<progress[area];level++){
+  const center=area*Math.PI/4,start=center+a0,end=center+a1,y0=level*STEP+.01,y1=y0+H-.02,ym=(y0+y1)/2,rm=(INNER+OUTER)/2
+  for(const r of[INNER+.012,OUTER-.012])for(let s=0;s<arcSteps;s++){
+   const aa=THREE.MathUtils.lerp(start,end,s/arcSteps),ab=THREE.MathUtils.lerp(start,end,(s+1)/arcSteps)
+   add(point(r,aa,ym),point(r,ab,ym))
+  }
+  add(point(INNER+.015,center,y0),point(INNER+.015,center,y1))
+  add(point(OUTER-.015,center,y0),point(OUTER-.015,center,y1))
+  add(point(INNER+.02,center,y1+.003),point(OUTER-.02,center,y1+.003))
+  for(let s=0;s<arcSteps;s++){
+   const aa=THREE.MathUtils.lerp(start,end,s/arcSteps),ab=THREE.MathUtils.lerp(start,end,(s+1)/arcSteps)
+   add(point(rm,aa,y1+.003),point(rm,ab,y1+.003))
+  }
+ }
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));return g
+}
+
+function glassMaterial(ghost=false){return new THREE.ShaderMaterial({vertexShader:vertex,fragmentShader:fragment,transparent:true,depthWrite:!ghost,side:THREE.DoubleSide,uniforms:{uBlue:{value:new THREE.Color(ghost?'#d6d9e3':BRAND)},uBrand:{value:new THREE.Color(BRAND)},uIce:{value:new THREE.Color('#ffffff')},uLight:{value:new THREE.Vector3(-4,10,7)},uOpacity:{value:ghost?0:.77},uGhost:{value:ghost?1:0}}})}
+function activeGlassMaterial(transition=false){return new THREE.MeshPhysicalMaterial({
+ color:'#ffffff',metalness:0,roughness:MOBILE?.46:.34,transmission:MOBILE?.34:.50,thickness:MOBILE?.56:.72,ior:1.24,
+ attenuationColor:new THREE.Color('#dbe5ff'),attenuationDistance:6.2,clearcoat:.62,clearcoatRoughness:.19,
+ specularIntensity:1.15,specularColor:new THREE.Color('#ffffff'),emissive:new THREE.Color('#000000'),emissiveIntensity:0,
+ side:THREE.DoubleSide,depthWrite:!transition,transparent:transition,opacity:transition?1:1
 })}
 
 function GlassTower({progress,transitions,highlighted,setHovered,setSelected}){
  const active=useRef(),ghost=useRef(),activeMap=useRef([]),ghostMap=useRef([])
- const activeGeo=useMemo(makeInstancedGeometry,[]),ghostGeo=useMemo(makeInstancedGeometry,[]),activeMat=useMemo(activeGlassMaterial,[]),ghostMat=useMemo(()=>glassMaterial(true),[])
- const baseColor=useMemo(()=>new THREE.Color('#d6def8'),[]),hoverColor=useMemo(()=>new THREE.Color(BRAND),[]),{invalidate}=useThree()
+ const activeGeo=useMemo(makeInstancedGeometry,[]),ghostGeo=useMemo(makeInstancedGeometry,[]),activeMat=useMemo(()=>activeGlassMaterial(false),[]),ghostMat=useMemo(()=>glassMaterial(true),[])
+ const hoverColor=useMemo(()=>new THREE.Color('#2f63ff'),[]),{invalidate}=useThree()
  useLayoutEffect(()=>{
   const skipped=new Set(transitions.map(t=>`${t.area}:${t.level}`)),m=new THREE.Matrix4(),p=new THREE.Vector3(),q=new THREE.Quaternion(),s=new THREE.Vector3(1,1,1),axis=new THREE.Vector3(0,1,0)
   let ai=0,gi=0;activeMap.current=[];ghostMap.current=[]
   for(let area=0;area<8;area++)for(let level=0;level<MAX;level++){
    if(skipped.has(`${area}:${level}`))continue
    p.set(0,level*STEP,0);q.setFromAxisAngle(axis,area*Math.PI/4);m.compose(p,q,s)
-   if(level<progress[area]){active.current.setMatrixAt(ai,m);active.current.setColorAt(ai,baseColor);activeMap.current[ai]={area,level,active:true};ai++}
-   else{ghost.current.setMatrixAt(gi,m);ghostMap.current[gi]={area,level,active:false};gi++}
+   if(level<progress[area]){
+    const completion=blockCompletion(area,level,progress),color=completionColor(completion)
+    active.current.setMatrixAt(ai,m);active.current.setColorAt(ai,color);activeMap.current[ai]={area,level,active:true,completion};ai++
+   }else{ghost.current.setMatrixAt(gi,m);ghostMap.current[gi]={area,level,active:false,completion:0};gi++}
   }
   active.current.count=ai;ghost.current.count=gi;active.current.instanceMatrix.needsUpdate=true;ghost.current.instanceMatrix.needsUpdate=true
   if(active.current.instanceColor)active.current.instanceColor.needsUpdate=true
   invalidate()
- },[progress,transitions,baseColor,invalidate])
+ },[progress,transitions,invalidate])
  useEffect(()=>{
   if(active.current){
-   for(let i=0;i<active.current.count;i++)active.current.setColorAt(i,baseColor)
+   for(let i=0;i<active.current.count;i++)active.current.setColorAt(i,completionColor(activeMap.current[i]?.completion||1))
    if(highlighted?.active){const idx=activeMap.current.findIndex(m=>m.area===highlighted.area&&m.level===highlighted.level);if(idx>=0)active.current.setColorAt(idx,hoverColor)}
    if(active.current.instanceColor)active.current.instanceColor.needsUpdate=true
   }
   const ghostHover=ghostGeo.getAttribute('instanceHover');ghostHover.array.fill(0)
   if(highlighted&&!highlighted.active){const idx=ghostMap.current.findIndex(m=>m.area===highlighted.area&&m.level===highlighted.level);if(idx>=0)ghostHover.setX(idx,1)}
   ghostHover.needsUpdate=true;invalidate()
- },[highlighted,progress,transitions,ghostGeo,baseColor,hoverColor,invalidate])
+ },[highlighted,progress,transitions,ghostGeo,hoverColor,invalidate])
  const hover=(map,e)=>{e.stopPropagation();const meta=map.current[e.instanceId];if(meta)setHovered(prev=>prev&&prev.area===meta.area&&prev.level===meta.level&&prev.active===meta.active?prev:meta)}
  const select=(map,e)=>{e.stopPropagation();const meta=map.current[e.instanceId];if(meta)setSelected({...meta})}
  const leave=e=>{e.stopPropagation();setHovered(null)}
- return<><instancedMesh ref={ghost} args={[ghostGeo,ghostMat,48]} frustumCulled={false} onPointerMove={e=>hover(ghostMap,e)} onPointerOut={leave} onClick={e=>select(ghostMap,e)}/><instancedMesh ref={active} args={[activeGeo,activeMat,48]} frustumCulled={false} onPointerMove={e=>hover(activeMap,e)} onPointerOut={leave} onClick={e=>select(activeMap,e)}/></>
+ return<><instancedMesh ref={ghost} args={[ghostGeo,ghostMat,48]} frustumCulled={false} onPointerMove={e=>hover(ghostMap,e)} onPointerOut={leave} onClick={e=>select(ghostMap,e)}/><instancedMesh ref={active} args={[activeGeo,activeMat,48]} frustumCulled={false} castShadow receiveShadow onPointerMove={e=>hover(activeMap,e)} onPointerOut={leave} onClick={e=>select(activeMap,e)}/></>
 }
 
+function ActiveGridLines({progress}){const geo=useMemo(()=>makeActiveGridGeometry(progress),[progress]);useEffect(()=>()=>geo.dispose(),[geo]);return<lineSegments geometry={geo} raycast={()=>{}} frustumCulled={false} renderOrder={2}><lineBasicMaterial color="#dce9ff" transparent opacity={.20} depthWrite={false}/></lineSegments>}
 function GhostOutlines({progress}){const ref=useRef(),geo=useMemo(()=>makeGhostOutlineGeometry(progress),[progress]);useLayoutEffect(()=>{if(ref.current)ref.current.computeLineDistances()},[geo]);useEffect(()=>()=>geo.dispose(),[geo]);return<lineSegments ref={ref} geometry={geo} raycast={()=>{}} frustumCulled={false} renderOrder={3}><lineDashedMaterial color="#8b919d" transparent opacity={.22} depthWrite={false} toneMapped={false} dashSize={.07} gapSize={.075}/></lineSegments>}
 
 function TransitionBlock({transition}){
- const geo=useMemo(makeGeometry,[]),mat=useMemo(()=>{const m=glassMaterial(false);m.uniforms.uOpacity.value=transition.type==='in'?0:.77;return m},[transition.id,transition.type]),{invalidate}=useThree()
- useFrame(()=>{const raw=Math.min(1,(performance.now()-transition.startedAt)/transition.duration),t=raw*raw*(3-2*raw),alpha=transition.type==='in'?t:1-t;mat.uniforms.uOpacity.value=.77*Math.max(0,Math.min(1,alpha));invalidate()})
- return<mesh geometry={geo} position={[0,transition.level*STEP,0]} rotation={[0,transition.area*Math.PI/4,0]} raycast={()=>{}}><primitive object={mat} attach="material"/></mesh>
+ const geo=useMemo(makeGeometry,[]),mat=useMemo(()=>{const m=activeGlassMaterial(true);m.color.copy(completionColor(.62));m.opacity=transition.type==='in'?0:1;return m},[transition.id,transition.type]),{invalidate}=useThree()
+ useFrame(()=>{const raw=Math.min(1,(performance.now()-transition.startedAt)/transition.duration),t=raw*raw*(3-2*raw),alpha=transition.type==='in'?t:1-t;mat.opacity=Math.max(0,Math.min(1,alpha));invalidate()})
+ return<mesh geometry={geo} material={mat} position={[0,transition.level*STEP,0]} rotation={[0,transition.area*Math.PI/4,0]} castShadow raycast={()=>{}}/>
 }
 function TransitionBlocks({transitions}){return<>{transitions.map(t=><TransitionBlock key={t.id} transition={t}/>)}</>}
 
@@ -148,6 +180,7 @@ function Floor(){return<mesh rotation={[-Math.PI/2,0,0]} position={[0,-.035,0]} 
 const aoVertex=`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`
 const aoFragment=`varying vec2 vUv;void main(){float r=distance(vUv,vec2(.5))*2.0;float ring=smoothstep(.26,.50,r)*(1.0-smoothstep(.64,.96,r));float broad=1.0-smoothstep(.28,1.0,r);float a=ring*.085+broad*.018;gl_FragColor=vec4(vec3(.12,.14,.18),a);}`
 function AmbientOcclusion(){return<mesh rotation={[-Math.PI/2,0,0]} position={[0,-.041,0]} raycast={()=>{}} renderOrder={-1}><circleGeometry args={[OUTER*1.55,128]}/><shaderMaterial vertexShader={aoVertex} fragmentShader={aoFragment} transparent depthWrite={false} depthTest={false}/></mesh>}
+function ShadowReceiver(){return<mesh rotation={[-Math.PI/2,0,0]} position={[0,-.045,0]} receiveShadow raycast={()=>{}}><circleGeometry args={[OUTER*2.2,96]}/><shadowMaterial transparent opacity={.13}/></mesh>}
 
 function CameraControls({targetY,rotating,speed,onUserStart,onUserEnd,detailOpen}){
  const controls=useRef(),offset=useRef(0),{camera,size,invalidate}=useThree(),desiredOffset=detailOpen?(MOBILE?size.width*.28:size.width*.17):0
@@ -158,7 +191,7 @@ function CameraControls({targetY,rotating,speed,onUserStart,onUserEnd,detailOpen
 
 function Scene({progress,transitions,highlighted,setHovered,setSelected,rotating,speed,onUserStart,onUserEnd,hudLabels,hudLines,detailOpen}){
  const targetY=MOBILE?2.55:2.25,target=new THREE.Vector3(0,targetY,0),dir=new THREE.Vector3(1,.46,1.04).normalize(),pos=target.clone().add(dir.multiplyScalar(MAX_DIST)),camera={position:pos.toArray(),fov:MOBILE?27:29}
- return<Canvas dpr={MOBILE?[1,1.5]:[1,1.7]} gl={{antialias:true,powerPreference:'high-performance',alpha:true}} onCreated={({gl})=>gl.setClearColor(0x000000,0)} camera={camera} frameloop={rotating||transitions.length?'always':'demand'} onPointerMissed={()=>{setHovered(null);setSelected(null)}}><ambientLight intensity={1.0}/><directionalLight position={[8,7,11]} intensity={3.1} color="#ffffff"/><directionalLight position={[-5,9,5]} intensity={1.15} color="#edf2ff"/><directionalLight position={[4,3,-5]} intensity={.48} color="#d8e2ff"/><GroundDotField/><Floor/><AmbientOcclusion/><Blueprint/><GlassTower progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected}/><GhostOutlines progress={progress}/><TransitionBlocks transitions={transitions}/><HudTracker labels={hudLabels} lines={hudLines}/><CameraControls targetY={targetY} rotating={rotating} speed={speed} onUserStart={onUserStart} onUserEnd={onUserEnd} detailOpen={detailOpen}/></Canvas>
+ return<Canvas shadows dpr={MOBILE?[1,1.5]:[1,1.7]} gl={{antialias:true,powerPreference:'high-performance',alpha:true}} onCreated={({gl})=>{gl.setClearColor(0x000000,0);gl.shadowMap.type=THREE.PCFSoftShadowMap}} camera={camera} frameloop={rotating||transitions.length?'always':'demand'} onPointerMissed={()=>{setHovered(null);setSelected(null)}}><ambientLight intensity={.78}/><directionalLight castShadow position={[8,9,12]} intensity={2.55} color="#ffffff" shadow-mapSize-width={MOBILE?512:1024} shadow-mapSize-height={MOBILE?512:1024} shadow-camera-left={-9} shadow-camera-right={9} shadow-camera-top={9} shadow-camera-bottom={-9} shadow-camera-near={1} shadow-camera-far={30} shadow-bias={-.00018}/><pointLight position={[0,5,11]} intensity={MOBILE?10:16} distance={34} decay={2} color="#ffffff"/><directionalLight position={[-5,8,4]} intensity={.72} color="#dce8ff"/><directionalLight position={[3,3,-5]} intensity={.30} color="#bfd2ff"/><GroundDotField/><ShadowReceiver/><Floor/><AmbientOcclusion/><Blueprint/><GlassTower progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected}/><ActiveGridLines progress={progress}/><GhostOutlines progress={progress}/><TransitionBlocks transitions={transitions}/><HudTracker labels={hudLabels} lines={hudLines}/><CameraControls targetY={targetY} rotating={rotating} speed={speed} onUserStart={onUserStart} onUserEnd={onUserEnd} detailOpen={detailOpen}/></Canvas>
 }
 
 function getSegmentInfo(block){const area=SW8_AREAS[block.area],item=area.visualBlocks[block.level];return{title:item[0],summary:item[1],foundation:!!item[2]}}
@@ -191,7 +224,7 @@ function App(){
  const runDemo=async()=>{if(demoRunning)return;const token=++demoToken.current,base=[...progressRef.current],zero=Array(8).fill(0),full=Array(8).fill(MAX),path=[...buildPath(base,zero),...buildPath(zero,full),...buildPath(full,base)];let current=[...base];setHovered(null);setSelected(null);setDemoRunning(true);for(const next of path){if(token!==demoToken.current)return;const change=getChange(current,next);if(!change)continue;const id=++transitionId.current,tr={...change,id,duration:145,startedAt:performance.now()};setTransitions(prev=>[...prev,tr]);setProgress(next);progressRef.current=next;current=[...next];setTimeout(()=>setTransitions(prev=>prev.filter(t=>t.id!==id)),tr.duration+25);await wait(56)}await wait(180);if(token===demoToken.current){setProgress(base);progressRef.current=base;setTransitions([]);setDemoRunning(false)}}
  useEffect(()=>()=>{clearResume();demoToken.current+=1},[])
  return<main className={selected?'detailOpen':''}><div className="backgroundFx"/><div className="visualStage"><div className="scene"><Scene progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected} rotating={rotating} speed={rotationSpeed} onUserStart={handleUserStart} onUserEnd={handleUserEnd} hudLabels={hudLabels} hudLines={hudLines} detailOpen={!!selected}/></div><div className="sceneGlow glowA"/><div className="sceneGlow glowB"/><div className="hudScreen" aria-hidden="true"><svg className="hudLeaders">{AREAS.map((_,i)=><line key={i} ref={el=>hudLines.current[i]=el}/>)}</svg>{AREAS.map((area,i)=><div className="hudLabel" key={area} ref={el=>hudLabels.current[i]=el}><div className="hudLabelNum">{String(i+1).padStart(2,'0')}</div><div className="hudLabelCopy"><strong>{area}</strong><span>POZIOM {progress[i]} / {MAX}</span><div className="hudLabelBars">{Array.from({length:MAX}).map((_,n)=><i key={n} className={n<progress[i]?'on':''}/>)}</div></div></div>)}</div></div>
- <header><div className="micro">SW8 / MODEL 25</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>{!detailBlock&&<div className="meta">FROSTED GLASS / HUD SYSTEM<br/>8 OBSZARÓW / 6 POZIOMÓW</div>}
+ <header><div className="micro">SW8 / MODEL 26</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>{!detailBlock&&<div className="meta">FROSTED GLASS / HUD SYSTEM<br/>8 OBSZARÓW / 6 POZIOMÓW</div>}
  <DetailPanel block={detailBlock} expanded={!!selected} visible={!!detailBlock} onClose={()=>{setSelected(null);setHovered(null)}}/>
  <div className="bottomControls"><button className="pauseToggle" onClick={togglePause} aria-label={paused?'Włącz automatyczny obrót':'Zatrzymaj automatyczny obrót'} title={paused?'Play':'Pause'}>{paused?'▶':'Ⅱ'}</button><button className="controlToggle" onClick={()=>setOpen(!open)}>{open?'ZAMKNIJ':'STEROWANIE'}</button><button className={`demoToggle ${demoRunning?'isRunning':''}`} onClick={runDemo} disabled={demoRunning}>{demoRunning?'DEMO…':'DEMO'}</button></div>
  {open&&<aside><div className="buttons"><button onClick={()=>setProgress(Array(8).fill(MAX))}>Pełna wieża</button><button onClick={()=>setProgress(INITIAL)}>Reset</button></div><div className="speedControl"><div><span>AUTO OBRÓT</span><b>{rotationSpeed.toFixed(2)}×</b></div><input type="range" min="0.10" max="1.00" step="0.05" value={rotationSpeed} onInput={e=>setRotationSpeed(+e.currentTarget.value)} onChange={e=>setRotationSpeed(+e.currentTarget.value)}/><small>{paused?'Pauza trwała':interactionHold?'Wznowienie za 10 s':'Aktywny'}</small></div>{AREAS.map((a,i)=><label key={a}><span>{String(i+1).padStart(2,'0')} / {a}</span><input type="range" min="0" max={MAX} value={progress[i]} onInput={e=>update(i,e.currentTarget.value)} onChange={e=>update(i,e.currentTarget.value)}/><b>{progress[i]}/{MAX}</b></label>)}</aside>}
