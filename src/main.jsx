@@ -38,30 +38,41 @@ void main(){
 }`
 
 const fragment=`
-uniform vec3 uBlue;uniform vec3 uIce;uniform vec3 uLight;uniform float uOpacity;uniform float uGhost;
+uniform vec3 uBlue;uniform vec3 uBrand;uniform vec3 uIce;uniform vec3 uLight;uniform float uOpacity;uniform float uGhost;
 varying vec3 vN;varying vec3 vW;varying float vY;varying vec3 vObj;varying float vHover;
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 void main(){
  vec3 N=normalize(vN),V=normalize(cameraPosition-vW),L=normalize(uLight);
- float ndv=max(dot(N,V),0.0),fres=pow(1.0-ndv,3.6),diffuse=max(dot(N,L),0.0);
+ float ndv=max(dot(N,V),0.0),fres=pow(1.0-ndv,3.55),diffuse=max(dot(N,L),0.0);
  float top=smoothstep(.04,.96,vY),edge=smoothstep(.09,.91,fres),facing=smoothstep(.14,.90,ndv);
  float n=hash(floor(vObj*32.0))*2.0-1.0;
  float glow=pow(diffuse,3.0);
  float band=.5+.5*sin(vW.y*2.9+vW.x*.31-vW.z*.22);
- vec3 deep=vec3(.018,.055,.25);
- vec3 electric=vec3(.11,.32,.86);
- vec3 col=mix(deep,uBlue,.69+diffuse*.12);
- col=mix(col,electric,glow*.23+band*.035);
- col=mix(col,uIce,top*.29+edge*.45);
- col+=n*.010;
- col+=vec3(.025,.08,.28)*(1.0-top)*.045;
- if(uGhost>.5) col=mix(col,vec3(.972,.976,.986),.93);
- if(vHover>.01){
-   vec3 lifted=min(vec3(1.0),col*1.16+vec3(.025,.045,.12));
-   col=mix(col,lifted,smoothstep(0.0,1.0,vHover));
+
+ vec3 col;
+ if(uGhost>.5){
+   col=mix(vec3(.955,.958,.968),uBlue,.075);
+   col=mix(col,vec3(1.0),top*.08+edge*.11);
+ }else{
+   col=min(vec3(1.0),uBlue*(.98+diffuse*.18));
+   col=mix(col,uIce,top*.11+edge*.20);
+   col+=uBlue*(glow*.045+band*.012);
+   col+=n*.007;
  }
- float alpha=uOpacity*(.61+edge*.31+facing*.05);
- alpha+=vHover*.055;
+
+ if(vHover>.01){
+   float h=smoothstep(0.0,1.0,vHover);
+   if(uGhost>.5){
+     vec3 ghostHover=mix(vec3(.91,.93,.98),uBrand,.34);
+     col=mix(col,ghostHover,.82*h);
+   }else{
+     vec3 brandLift=min(vec3(1.0),uBrand*1.18+vec3(.018,.028,.075));
+     col=mix(col,brandLift,.58*h);
+   }
+ }
+
+ float alpha=uOpacity*(.70+edge*.22+facing*.04);
+ alpha+=vHover*(uGhost>.5?.16:.045);
  gl_FragColor=vec4(col,alpha);
 }`
 
@@ -111,9 +122,10 @@ function glassMaterial(ghost=false){
   vertexShader:vertex,fragmentShader:fragment,transparent:true,depthWrite:!ghost,side:THREE.DoubleSide,
   uniforms:{
    uBlue:{value:new THREE.Color(ghost?'#d6d9e3':BRAND)},
+   uBrand:{value:new THREE.Color(BRAND)},
    uIce:{value:new THREE.Color('#ffffff')},
    uLight:{value:new THREE.Vector3(-4,10,7)},
-   uOpacity:{value:ghost?.050:.69},
+   uOpacity:{value:ghost?.046:.77},
    uGhost:{value:ghost?1:0}
   }
  })
@@ -151,27 +163,32 @@ function GlassTower({progress,transitions,hovered,setHovered}){
  },[progress,transitions,invalidate])
 
  useEffect(()=>{
-  const attr=activeGeo.getAttribute('instanceHover')
-  attr.array.fill(0)
-  if(hovered?.active){
-   const idx=activeMap.current.findIndex(m=>m.area===hovered.area&&m.level===hovered.level)
+  const activeHover=activeGeo.getAttribute('instanceHover')
+  const ghostHover=ghostGeo.getAttribute('instanceHover')
+  activeHover.array.fill(0);ghostHover.array.fill(0)
+
+  if(hovered){
+   const map=hovered.active?activeMap.current:ghostMap.current
+   const attr=hovered.active?activeHover:ghostHover
+   const idx=map.findIndex(m=>m.area===hovered.area&&m.level===hovered.level)
    if(idx>=0)attr.setX(idx,1)
   }
-  attr.needsUpdate=true
-  invalidate()
- },[hovered,progress,transitions,activeGeo,invalidate])
 
- const hover=e=>{
+  activeHover.needsUpdate=true;ghostHover.needsUpdate=true
+  invalidate()
+ },[hovered,progress,transitions,activeGeo,ghostGeo,invalidate])
+
+ const hover=(map,e)=>{
   e.stopPropagation()
-  const meta=activeMap.current[e.instanceId]
+  const meta=map.current[e.instanceId]
   if(!meta)return
-  setHovered(prev=>prev&&prev.area===meta.area&&prev.level===meta.level?prev:meta)
+  setHovered(prev=>prev&&prev.area===meta.area&&prev.level===meta.level&&prev.active===meta.active?prev:meta)
  }
  const leave=e=>{e.stopPropagation();setHovered(null)}
 
  return <>
-  <instancedMesh ref={ghost} args={[ghostGeo,ghostMat,48]} frustumCulled={false} raycast={()=>{}}/>
-  <instancedMesh ref={active} args={[activeGeo,activeMat,48]} frustumCulled={false} onPointerMove={hover} onPointerOut={leave}/>
+  <instancedMesh ref={ghost} args={[ghostGeo,ghostMat,48]} frustumCulled={false} onPointerMove={e=>hover(ghostMap,e)} onPointerOut={leave}/>
+  <instancedMesh ref={active} args={[activeGeo,activeMat,48]} frustumCulled={false} onPointerMove={e=>hover(activeMap,e)} onPointerOut={leave}/>
  </>
 }
 
@@ -186,7 +203,7 @@ function TransitionBlock({transition}){
  const geo=useMemo(makeGeometry,[])
  const mat=useMemo(()=>{
   const m=glassMaterial(false)
-  m.uniforms.uOpacity.value=transition.type==='in'?0:.69
+  m.uniforms.uOpacity.value=transition.type==='in'?0:.77
   return m
  },[transition.id,transition.type])
  const {invalidate}=useThree()
@@ -194,7 +211,7 @@ function TransitionBlock({transition}){
   const raw=Math.min(1,(performance.now()-transition.startedAt)/transition.duration)
   const t=raw*raw*(3-2*raw)
   const alpha=transition.type==='in'?t:1-t
-  mat.uniforms.uOpacity.value=.69*Math.max(0,Math.min(1,alpha))
+  mat.uniforms.uOpacity.value=.77*Math.max(0,Math.min(1,alpha))
   invalidate()
  })
  return <mesh geometry={geo} position={[0,transition.level*STEP,0]} rotation={[0,transition.area*Math.PI/4,0]} raycast={()=>{}}>
@@ -389,14 +406,14 @@ function App(){
    </div>)}
   </div>
 
-  <header><div className="micro">SW8 / MODEL 16</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
+  <header><div className="micro">SW8 / MODEL 17</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
   {!hovered&&<div className="meta">FROSTED GLASS / HUD SYSTEM<br/>8 OBSZARÓW / 6 POZIOMÓW</div>}
 
   {hovered&&<div className="hoverPanel">
    <div className="hoverPanelMicro">OBSZAR {String(hovered.area+1).padStart(2,'0')} · BLOK {String(hovered.level+1).padStart(2,'0')}</div>
    <h3>{AREAS[hovered.area]}</h3>
    <p className="hoverQuestion">{AREA_QUESTIONS[hovered.area]}</p>
-   <div className="hoverFacts"><span>Poziom <b>{hovered.level+1}/{MAX}</b></span><span>Status <b>ukończony</b></span></div>
+   <div className="hoverFacts"><span>Poziom <b>{hovered.level+1}/{MAX}</b></span><span>Status <b>{hovered.active?'ukończony':'do zbudowania'}</b></span></div>
   </div>}
 
   <div className="bottomControls">
