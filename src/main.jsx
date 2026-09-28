@@ -22,22 +22,24 @@ const INNER=MOBILE?1.5:1.9, OUTER=MOBILE?2.72:3.65, H=MOBILE?1.02:.82, STEP=MOBI
 const MAX_DIST=MOBILE?26:27
 const NODE_R=OUTER+.86
 const OUTER_RING=NODE_R
-const ULTRAMARINE='#244DFF'
+const BRAND='#153AC7'
 
 const vertex=`
-varying vec3 vN;varying vec3 vW;varying float vY;varying vec3 vObj;
+attribute float instanceHover;
+varying vec3 vN;varying vec3 vW;varying float vY;varying vec3 vObj;varying float vHover;
 void main(){
  vec4 world=modelMatrix*instanceMatrix*vec4(position,1.0);
  vW=world.xyz;
  vN=normalize(mat3(modelMatrix*instanceMatrix)*normal);
  vY=position.y;
  vObj=position;
+ vHover=instanceHover;
  gl_Position=projectionMatrix*viewMatrix*world;
 }`
 
 const fragment=`
 uniform vec3 uBlue;uniform vec3 uIce;uniform vec3 uLight;uniform float uOpacity;uniform float uGhost;
-varying vec3 vN;varying vec3 vW;varying float vY;varying vec3 vObj;
+varying vec3 vN;varying vec3 vW;varying float vY;varying vec3 vObj;varying float vHover;
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 void main(){
  vec3 N=normalize(vN),V=normalize(cameraPosition-vW),L=normalize(uLight);
@@ -46,15 +48,20 @@ void main(){
  float n=hash(floor(vObj*32.0))*2.0-1.0;
  float glow=pow(diffuse,3.0);
  float band=.5+.5*sin(vW.y*2.9+vW.x*.31-vW.z*.22);
- vec3 deep=vec3(.035,.11,.62);
- vec3 cyan=vec3(.08,.58,1.0);
- vec3 col=mix(deep,uBlue,.52+diffuse*.18);
- col=mix(col,cyan,glow*.28+band*.045);
- col=mix(col,uIce,top*.32+edge*.48);
- col+=n*.012;
- col+=vec3(.04,.14,.48)*(1.0-top)*.055;
- if(uGhost>.5) col=mix(col,vec3(.965,.985,1.0),.90);
+ vec3 deep=vec3(.018,.055,.25);
+ vec3 electric=vec3(.11,.32,.86);
+ vec3 col=mix(deep,uBlue,.69+diffuse*.12);
+ col=mix(col,electric,glow*.23+band*.035);
+ col=mix(col,uIce,top*.29+edge*.45);
+ col+=n*.010;
+ col+=vec3(.025,.08,.28)*(1.0-top)*.045;
+ if(uGhost>.5) col=mix(col,vec3(.972,.976,.986),.93);
+ if(vHover>.01){
+   vec3 lifted=min(vec3(1.0),col*1.16+vec3(.025,.045,.12));
+   col=mix(col,lifted,smoothstep(0.0,1.0,vHover));
+ }
  float alpha=uOpacity*(.61+edge*.31+facing*.05);
+ alpha+=vHover*.055;
  gl_FragColor=vec4(col,alpha);
 }`
 
@@ -66,7 +73,15 @@ function makeGeometry(){
  shape.absarc(0,0,INNER,a1,a0,true)
  shape.closePath()
  const g=new THREE.ExtrudeGeometry(shape,{depth:H,bevelEnabled:false,curveSegments:MOBILE?20:30})
- g.rotateX(-Math.PI/2);g.computeVertexNormals();return g
+ g.rotateX(-Math.PI/2);g.computeVertexNormals()
+ g.setAttribute('instanceHover',new THREE.BufferAttribute(new Float32Array(g.getAttribute('position').count),1))
+ return g
+}
+
+function makeInstancedGeometry(){
+ const g=makeGeometry()
+ g.setAttribute('instanceHover',new THREE.InstancedBufferAttribute(new Float32Array(48),1))
+ return g
 }
 
 function makeAllOutlineGeometry(){
@@ -91,39 +106,33 @@ function makeAllOutlineGeometry(){
  return g
 }
 
-function makeSingleOutlineGeometry(){
- const base=makeGeometry()
- const edges=new THREE.EdgesGeometry(base,24)
- base.dispose()
- return edges
-}
-
 function glassMaterial(ghost=false){
  return new THREE.ShaderMaterial({
   vertexShader:vertex,fragmentShader:fragment,transparent:true,depthWrite:!ghost,side:THREE.DoubleSide,
   uniforms:{
-   uBlue:{value:new THREE.Color(ghost?'#c9d8ff':ULTRAMARINE)},
+   uBlue:{value:new THREE.Color(ghost?'#d6d9e3':BRAND)},
    uIce:{value:new THREE.Color('#ffffff')},
    uLight:{value:new THREE.Vector3(-4,10,7)},
-   uOpacity:{value:ghost?.055:.68},
+   uOpacity:{value:ghost?.050:.69},
    uGhost:{value:ghost?1:0}
   }
  })
 }
 
-function GlassTower({progress,transition,setHovered}){
+function GlassTower({progress,transitions,hovered,setHovered}){
  const active=useRef(),ghost=useRef()
  const activeMap=useRef([]),ghostMap=useRef([])
- const geo=useMemo(makeGeometry,[])
+ const activeGeo=useMemo(makeInstancedGeometry,[]),ghostGeo=useMemo(makeInstancedGeometry,[])
  const activeMat=useMemo(()=>glassMaterial(false),[]),ghostMat=useMemo(()=>glassMaterial(true),[])
  const {invalidate}=useThree()
 
  useLayoutEffect(()=>{
+  const skipped=new Set(transitions.map(t=>`${t.area}:${t.level}`))
   const m=new THREE.Matrix4(),p=new THREE.Vector3(),q=new THREE.Quaternion(),s=new THREE.Vector3(1,1,1),axis=new THREE.Vector3(0,1,0)
   let ai=0,gi=0
   activeMap.current=[];ghostMap.current=[]
   for(let area=0;area<8;area++)for(let level=0;level<MAX;level++){
-   if(transition&&transition.area===area&&transition.level===level)continue
+   if(skipped.has(`${area}:${level}`))continue
    p.set(0,level*STEP,0);q.setFromAxisAngle(axis,area*Math.PI/4);m.compose(p,q,s)
    const on=level<progress[area]
    if(on){
@@ -139,59 +148,61 @@ function GlassTower({progress,transition,setHovered}){
   active.current.count=ai;ghost.current.count=gi
   active.current.instanceMatrix.needsUpdate=true;ghost.current.instanceMatrix.needsUpdate=true
   invalidate()
- },[progress,transition,invalidate])
+ },[progress,transitions,invalidate])
 
- const hover=(map,e)=>{
+ useEffect(()=>{
+  const attr=activeGeo.getAttribute('instanceHover')
+  attr.array.fill(0)
+  if(hovered?.active){
+   const idx=activeMap.current.findIndex(m=>m.area===hovered.area&&m.level===hovered.level)
+   if(idx>=0)attr.setX(idx,1)
+  }
+  attr.needsUpdate=true
+  invalidate()
+ },[hovered,progress,transitions,activeGeo,invalidate])
+
+ const hover=e=>{
   e.stopPropagation()
-  const meta=map.current[e.instanceId]
+  const meta=activeMap.current[e.instanceId]
   if(!meta)return
-  setHovered(prev=>prev&&prev.area===meta.area&&prev.level===meta.level&&prev.active===meta.active?prev:meta)
+  setHovered(prev=>prev&&prev.area===meta.area&&prev.level===meta.level?prev:meta)
  }
  const leave=e=>{e.stopPropagation();setHovered(null)}
 
  return <>
-  <instancedMesh ref={ghost} args={[geo,ghostMat,48]} frustumCulled={false} onPointerMove={e=>hover(ghostMap,e)} onPointerOut={leave}/>
-  <instancedMesh ref={active} args={[geo,activeMat,48]} frustumCulled={false} onPointerMove={e=>hover(activeMap,e)} onPointerOut={leave}/>
+  <instancedMesh ref={ghost} args={[ghostGeo,ghostMat,48]} frustumCulled={false} raycast={()=>{}}/>
+  <instancedMesh ref={active} args={[activeGeo,activeMat,48]} frustumCulled={false} onPointerMove={hover} onPointerOut={leave}/>
  </>
 }
 
 function BlockOutlines(){
  const geo=useMemo(makeAllOutlineGeometry,[])
  return <lineSegments geometry={geo} raycast={()=>{}} frustumCulled={false} renderOrder={3}>
-  <lineBasicMaterial color="#667286" transparent opacity={.12} depthWrite={false} toneMapped={false}/>
+  <lineBasicMaterial color="#8b919d" transparent opacity={.15} depthWrite={false} toneMapped={false}/>
  </lineSegments>
 }
 
 function TransitionBlock({transition}){
  const geo=useMemo(makeGeometry,[])
- const mat=useMemo(()=>glassMaterial(false),[])
+ const mat=useMemo(()=>{
+  const m=glassMaterial(false)
+  m.uniforms.uOpacity.value=transition.type==='in'?0:.69
+  return m
+ },[transition.id,transition.type])
  const {invalidate}=useThree()
- useEffect(()=>{
-  if(!transition)return
-  mat.uniforms.uOpacity.value=transition.type==='in'?0:.68
-  invalidate()
- },[transition,mat,invalidate])
  useFrame(()=>{
-  if(!transition)return
   const raw=Math.min(1,(performance.now()-transition.startedAt)/transition.duration)
   const t=raw*raw*(3-2*raw)
   const alpha=transition.type==='in'?t:1-t
-  mat.uniforms.uOpacity.value=.68*Math.max(0,Math.min(1,alpha))
+  mat.uniforms.uOpacity.value=.69*Math.max(0,Math.min(1,alpha))
   invalidate()
  })
- if(!transition)return null
  return <mesh geometry={geo} position={[0,transition.level*STEP,0]} rotation={[0,transition.area*Math.PI/4,0]} raycast={()=>{}}>
   <primitive object={mat} attach="material"/>
  </mesh>
 }
 
-function HoverOutline({hovered}){
- const geo=useMemo(makeSingleOutlineGeometry,[])
- if(!hovered)return null
- return <lineSegments geometry={geo} position={[0,hovered.level*STEP,0]} rotation={[0,hovered.area*Math.PI/4,0]} scale={[1.006,1.006,1.006]} raycast={()=>{}} frustumCulled={false} renderOrder={7}>
-  <lineBasicMaterial color="#2f8dff" transparent opacity={.92} depthWrite={false} toneMapped={false}/>
- </lineSegments>
-}
+function TransitionBlocks({transitions}){return <>{transitions.map(t=><TransitionBlock key={t.id} transition={t}/>)}</>}
 
 function HudTracker({labels,lines}){
  const {camera,size}=useThree()
@@ -239,25 +250,28 @@ function HudTracker({labels,lines}){
 function Blueprint(){
  const rings=[INNER*.72,INNER,OUTER,OUTER+.42]
  return <group position={[0,.008,0]} raycast={()=>{}}>
-  {rings.map((r,i)=><mesh key={r} rotation={[-Math.PI/2,0,0]} raycast={()=>{}}><ringGeometry args={[r-(i<3?.009:.006),r+(i<3?.009:.006),MOBILE?80:128]}/><meshBasicMaterial color={i===2?'#4b8edc':'#9bbde3'} transparent opacity={i===2?.28:i<3?.19:.11}/></mesh>)}
+  {rings.map((r,i)=><mesh key={r} rotation={[-Math.PI/2,0,0]} raycast={()=>{}}><ringGeometry args={[r-(i<3?.009:.006),r+(i<3?.009:.006),MOBILE?80:128]}/><meshBasicMaterial color={i===2?BRAND:'#9ca9bc'} transparent opacity={i===2?.26:i<3?.16:.10}/></mesh>)}
   {Array.from({length:8}).map((_,i)=>{const a=i*Math.PI/4,r1=INNER*.54,r2=NODE_R,x=Math.cos(a)*NODE_R,z=Math.sin(a)*NODE_R;return <group key={i}>
-   <mesh position={[Math.cos(a)*(r1+r2)/2,.014,Math.sin(a)*(r1+r2)/2]} rotation={[0,-a,0]} raycast={()=>{}}><boxGeometry args={[.006,.006,r2-r1]}/><meshBasicMaterial color="#6d9fd7" transparent opacity={.20}/></mesh>
-   <mesh position={[x,.017,z]} rotation={[-Math.PI/2,0,0]} raycast={()=>{}}><circleGeometry args={[.071,32]}/><meshBasicMaterial color="#ffffff" transparent opacity={.99}/></mesh>
-   <mesh position={[x,.019,z]} rotation={[-Math.PI/2,0,0]} raycast={()=>{}}><ringGeometry args={[.076,.113,40]}/><meshBasicMaterial color="#1676df" transparent opacity={.88}/></mesh>
-   <mesh position={[x,.018,z]} rotation={[-Math.PI/2,0,0]} raycast={()=>{}}><ringGeometry args={[.113,.119,40]}/><meshBasicMaterial color="#92c8ff" transparent opacity={.28}/></mesh>
+   <mesh position={[Math.cos(a)*(r1+r2)/2,.014,Math.sin(a)*(r1+r2)/2]} rotation={[0,-a,0]} raycast={()=>{}}><boxGeometry args={[.006,.006,r2-r1]}/><meshBasicMaterial color={BRAND} transparent opacity={.15}/></mesh>
+   <mesh position={[x,.017,z]} rotation={[-Math.PI/2,0,0]} raycast={()=>{}}><circleGeometry args={[.071,32]}/><meshBasicMaterial color="#f7f7f7" transparent opacity={.99}/></mesh>
+   <mesh position={[x,.019,z]} rotation={[-Math.PI/2,0,0]} raycast={()=>{}}><ringGeometry args={[.076,.113,40]}/><meshBasicMaterial color={BRAND} transparent opacity={.90}/></mesh>
+   <mesh position={[x,.018,z]} rotation={[-Math.PI/2,0,0]} raycast={()=>{}}><ringGeometry args={[.113,.119,40]}/><meshBasicMaterial color={BRAND} transparent opacity={.20}/></mesh>
   </group>})}
  </group>
 }
 
 function Floor(){return <mesh rotation={[-Math.PI/2,0,0]} position={[0,-.035,0]} raycast={()=>{}}>
  <ringGeometry args={[OUTER_RING-.012,OUTER_RING+.012,128]}/>
- <meshBasicMaterial color="#aebdce" transparent opacity={.56}/>
+ <meshBasicMaterial color="#9097a2" transparent opacity={.48}/>
  </mesh>}
 
-function AmbientOcclusion(){return <group position={[0,-.031,0]}>
- <mesh rotation={[-Math.PI/2,0,0]} raycast={()=>{}}><ringGeometry args={[INNER*.86,OUTER*1.02,128]}/><meshBasicMaterial color="#506a91" transparent opacity={.035} depthWrite={false}/></mesh>
- <mesh rotation={[-Math.PI/2,0,0]} raycast={()=>{}}><ringGeometry args={[OUTER*.84,OUTER*1.045,128]}/><meshBasicMaterial color="#3d5b87" transparent opacity={.026} depthWrite={false}/></mesh>
- </group>}
+const aoVertex=`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`
+const aoFragment=`varying vec2 vUv;void main(){float r=distance(vUv,vec2(.5))*2.0;float ring=smoothstep(.26,.50,r)*(1.0-smoothstep(.64,.96,r));float broad=1.0-smoothstep(.28,1.0,r);float a=ring*.085+broad*.018;gl_FragColor=vec4(vec3(.12,.14,.18),a);}`
+
+function AmbientOcclusion(){return <mesh rotation={[-Math.PI/2,0,0]} position={[0,-.041,0]} raycast={()=>{}} renderOrder={-1}>
+ <circleGeometry args={[OUTER*1.55,128]}/>
+ <shaderMaterial vertexShader={aoVertex} fragmentShader={aoFragment} transparent depthWrite={false} depthTest={false}/>
+ </mesh>}
 
 function CameraControls({targetY,rotating,speed,onUserStart,onUserEnd}){
  const {invalidate}=useThree()
@@ -269,15 +283,14 @@ function CameraControls({targetY,rotating,speed,onUserStart,onUserEnd}){
  />
 }
 
-function Scene({progress,transition,hovered,setHovered,rotating,speed,onUserStart,onUserEnd,hudLabels,hudLines}){
+function Scene({progress,transitions,hovered,setHovered,rotating,speed,onUserStart,onUserEnd,hudLabels,hudLines}){
  const targetY=MOBILE?2.55:2.25
  const target=new THREE.Vector3(0,targetY,0),dir=new THREE.Vector3(1,.46,1.04).normalize(),pos=target.clone().add(dir.multiplyScalar(MAX_DIST))
  const camera={position:pos.toArray(),fov:MOBILE?27:29}
- return <Canvas dpr={MOBILE?[1,1.5]:[1,1.7]} gl={{antialias:true,powerPreference:'high-performance',alpha:false}} camera={camera} frameloop={rotating||transition?'always':'demand'} onPointerMissed={()=>setHovered(null)}>
-  <color attach="background" args={['#fcfdff']}/>
+ return <Canvas dpr={MOBILE?[1,1.5]:[1,1.7]} gl={{antialias:true,powerPreference:'high-performance',alpha:true}} onCreated={({gl})=>gl.setClearColor(0x000000,0)} camera={camera} frameloop={rotating||transitions.length?'always':'demand'} onPointerMissed={()=>setHovered(null)}>
   <Floor/><AmbientOcclusion/><Blueprint/>
-  <GlassTower progress={progress} transition={transition} setHovered={setHovered}/>
-  <BlockOutlines/><TransitionBlock transition={transition}/><HoverOutline hovered={hovered}/><HudTracker labels={hudLabels} lines={hudLines}/>
+  <GlassTower progress={progress} transitions={transitions} hovered={hovered} setHovered={setHovered}/>
+  <BlockOutlines/><TransitionBlocks transitions={transitions}/><HudTracker labels={hudLabels} lines={hudLines}/>
   <CameraControls targetY={targetY} rotating={rotating} speed={speed} onUserStart={onUserStart} onUserEnd={onUserEnd}/>
  </Canvas>
 }
@@ -285,8 +298,8 @@ function Scene({progress,transition,hovered,setHovered,rotating,speed,onUserStar
 function App(){
  const[progress,setProgress]=useState(INITIAL),[open,setOpen]=useState(false)
  const[paused,setPaused]=useState(false),[interactionHold,setInteractionHold]=useState(false),[rotationSpeed,setRotationSpeed]=useState(.35)
- const[demoRunning,setDemoRunning]=useState(false),[transition,setTransition]=useState(null),[hovered,setHovered]=useState(null)
- const resumeTimer=useRef(null),demoToken=useRef(0),progressRef=useRef(INITIAL)
+ const[demoRunning,setDemoRunning]=useState(false),[transitions,setTransitions]=useState([]),[hovered,setHovered]=useState(null)
+ const resumeTimer=useRef(null),demoToken=useRef(0),progressRef=useRef(INITIAL),transitionId=useRef(0)
  const hudLabels=useRef([]),hudLines=useRef([])
  const rotating=!paused&&!interactionHold
 
@@ -295,7 +308,7 @@ function App(){
  const update=(i,v)=>setProgress(p=>p.map((x,n)=>n===i?+v:x))
  const clearResume=()=>{if(resumeTimer.current){clearTimeout(resumeTimer.current);resumeTimer.current=null}}
  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))
- const cancelDemo=()=>{demoToken.current+=1;setDemoRunning(false);setTransition(null)}
+ const cancelDemo=()=>{demoToken.current+=1;setDemoRunning(false);setTransitions([])}
  const handleUserStart=()=>{
   clearResume();setHovered(null)
   if(demoRunning)cancelDemo()
@@ -328,7 +341,7 @@ function App(){
   if(area<0)return null
   const type=to[area]>from[area]?'in':'out'
   const level=type==='in'?from[area]:to[area]
-  return {area,level,type,duration:90,startedAt:performance.now()}
+  return {area,level,type}
  }
 
  const runDemo=async()=>{
@@ -342,22 +355,26 @@ function App(){
   for(const next of path){
    if(token!==demoToken.current)return
    const change=getChange(current,next)
-   setTransition(change);setProgress(next);progressRef.current=next;current=[...next]
-   await wait(94)
-   if(token!==demoToken.current)return
-   setTransition(null)
-   await wait(6)
+   if(!change)continue
+   const id=++transitionId.current
+   const tr={...change,id,duration:145,startedAt:performance.now()}
+   setTransitions(prev=>[...prev,tr])
+   setProgress(next);progressRef.current=next;current=[...next]
+   setTimeout(()=>setTransitions(prev=>prev.filter(t=>t.id!==id)),tr.duration+25)
+   await wait(56)
   }
 
+  await wait(180)
   if(token===demoToken.current){
-   setProgress(base);progressRef.current=base;setTransition(null);setDemoRunning(false)
+   setProgress(base);progressRef.current=base;setTransitions([]);setDemoRunning(false)
   }
  }
 
  useEffect(()=>()=>{clearResume();demoToken.current+=1},[])
 
  return <main>
-  <div className="scene"><Scene progress={progress} transition={transition} hovered={hovered} setHovered={setHovered} rotating={rotating} speed={rotationSpeed} onUserStart={handleUserStart} onUserEnd={handleUserEnd} hudLabels={hudLabels} hudLines={hudLines}/></div>
+  <div className="backgroundFx"/>
+  <div className="scene"><Scene progress={progress} transitions={transitions} hovered={hovered} setHovered={setHovered} rotating={rotating} speed={rotationSpeed} onUserStart={handleUserStart} onUserEnd={handleUserEnd} hudLabels={hudLabels} hudLines={hudLines}/></div>
   <div className="sceneGlow glowA"/><div className="sceneGlow glowB"/>
 
   <div className="hudScreen" aria-hidden="true">
@@ -372,14 +389,14 @@ function App(){
    </div>)}
   </div>
 
-  <header><div className="micro">SW8 / MODEL 15</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
+  <header><div className="micro">SW8 / MODEL 16</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
   {!hovered&&<div className="meta">FROSTED GLASS / HUD SYSTEM<br/>8 OBSZARÓW / 6 POZIOMÓW</div>}
 
   {hovered&&<div className="hoverPanel">
    <div className="hoverPanelMicro">OBSZAR {String(hovered.area+1).padStart(2,'0')} · BLOK {String(hovered.level+1).padStart(2,'0')}</div>
    <h3>{AREAS[hovered.area]}</h3>
    <p className="hoverQuestion">{AREA_QUESTIONS[hovered.area]}</p>
-   <div className="hoverFacts"><span>Poziom <b>{hovered.level+1}/{MAX}</b></span><span>Status <b>{hovered.active?'ukończony':'do zbudowania'}</b></span></div>
+   <div className="hoverFacts"><span>Poziom <b>{hovered.level+1}/{MAX}</b></span><span>Status <b>ukończony</b></span></div>
   </div>}
 
   <div className="bottomControls">
