@@ -14,6 +14,22 @@ THREE.MeshPhysicalMaterial.prototype.setValues = function(values){
   return originalPhysicalSetValues.call(this,values)
 }
 
+// Give unfinished blocks a very light neutral fill so their volume remains readable,
+// while the dashed outline still carries the primary "not completed" state.
+const originalShaderSetValues = THREE.ShaderMaterial.prototype.setValues
+THREE.ShaderMaterial.prototype.setValues = function(values){
+  if(values && typeof values === 'object' && values.uniforms?.uGhost?.value>.5 && values.uniforms?.uOpacity){
+    values={
+      ...values,
+      uniforms:{
+        ...values.uniforms,
+        uOpacity:{...values.uniforms.uOpacity,value:.08},
+      },
+    }
+  }
+  return originalShaderSetValues.call(this,values)
+}
+
 // Keep unfinished blocks clearly visible without competing with completed glass.
 // Target only the ghost-outline dashed material used by the SW8 tower.
 const originalDashedSetValues = THREE.LineDashedMaterial.prototype.setValues
