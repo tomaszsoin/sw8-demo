@@ -12,6 +12,7 @@ const MOBILE=typeof window!=='undefined'&&matchMedia('(max-width:700px)').matche
 const INNER=MOBILE?1.5:1.9,OUTER=MOBILE?2.72:3.65,H=MOBILE?1.02:.82,STEP=MOBILE?1.045:.845
 const MAX_DIST=MOBILE?26:27,NODE_R=OUTER+.86,OUTER_RING=NODE_R,BRAND='#153AC7'
 const PALE_BLUE='#edf4ff'
+const TRANSMISSION_BG=new THREE.Color('#f7f7f7')
 
 function blockCompletion(area,level,progress){
  if(level>=progress[area])return 0
@@ -114,26 +115,26 @@ function transitionGlassMaterial(){return new THREE.MeshPhysicalMaterial({
 
 function FrostedTransmissionMaterial(){
  return <MeshTransmissionMaterial
-  transmissionSampler
   vertexColors
+  background={TRANSMISSION_BG}
   color="#ffffff"
-  transmission={.97}
-  roughness={MOBILE?.48:.40}
-  thickness={MOBILE?.36:.52}
-  ior={1.20}
-  chromaticAberration={MOBILE?.002:.006}
-  anisotropicBlur={MOBILE?.28:.42}
-  distortion={MOBILE?.012:.025}
-  distortionScale={.34}
+  transmission={.94}
+  roughness={MOBILE?.46:.36}
+  thickness={MOBILE?.32:.46}
+  ior={1.18}
+  chromaticAberration={MOBILE?.001:.004}
+  anisotropicBlur={MOBILE?.24:.36}
+  distortion={MOBILE?.008:.018}
+  distortionScale={.32}
   temporalDistortion={0}
   samples={MOBILE?2:4}
   resolution={MOBILE?64:128}
-  attenuationColor="#dfeaff"
-  attenuationDistance={MOBILE?11:14}
-  clearcoat={.10}
-  clearcoatRoughness={.56}
-  specularIntensity={.72}
-  envMapIntensity={1.35}
+  attenuationColor="#e7efff"
+  attenuationDistance={MOBILE?13:18}
+  clearcoat={.08}
+  clearcoatRoughness={.60}
+  specularIntensity={.68}
+  envMapIntensity={1.25}
   metalness={0}
   side={THREE.DoubleSide}
   toneMapped
@@ -233,7 +234,7 @@ function CameraControls({targetY,rotating,speed,onUserStart,onUserEnd,detailOpen
 
 function Scene({progress,transitions,highlighted,setHovered,setSelected,rotating,speed,onUserStart,onUserEnd,hudLabels,hudLines,detailOpen}){
  const targetY=MOBILE?2.55:2.25,target=new THREE.Vector3(0,targetY,0),dir=new THREE.Vector3(1,.46,1.04).normalize(),pos=target.clone().add(dir.multiplyScalar(MAX_DIST)),camera={position:pos.toArray(),fov:MOBILE?27:29}
- return<Canvas dpr={MOBILE?[1,1.5]:[1,1.7]} gl={{antialias:true,powerPreference:'high-performance',alpha:true}} onCreated={({gl})=>{gl.setClearColor(0x000000,0);gl.toneMapping=THREE.ACESFilmicToneMapping;gl.toneMappingExposure=1.03;gl.transmissionResolutionScale=MOBILE?.24:.42}} camera={camera} frameloop={rotating||transitions.length?'always':'demand'} onPointerMissed={()=>{setHovered(null);setSelected(null)}}>
+ return<Canvas dpr={MOBILE?[1,1.5]:[1,1.7]} gl={{antialias:true,powerPreference:'high-performance',alpha:true}} onCreated={({gl})=>{gl.setClearColor(0xf7f7f7,0);gl.toneMapping=THREE.ACESFilmicToneMapping;gl.toneMappingExposure=1.03;gl.transmissionResolutionScale=MOBILE?.24:.42}} camera={camera} frameloop={rotating||transitions.length?'always':'demand'} onPointerMissed={()=>{setHovered(null);setSelected(null)}}>
   <ambientLight intensity={.28}/><hemisphereLight args={['#ffffff','#dbe6f4',.36]}/><directionalLight position={[2,8,5]} intensity={.55} color="#ffffff"/><pointLight position={[0,4.8,8]} intensity={MOBILE?1.2:1.7} distance={25} decay={2} color="#ffffff"/><directionalLight position={[-4,6,-7]} intensity={.24} color="#9bc9ff"/>
   <StudioEnvironment/><GroundDotField/><SoftContactShadows progress={progress}/><Floor/><AmbientOcclusion/><Blueprint/><GlassTower progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected}/><ActiveGridLines progress={progress}/><GhostOutlines progress={progress}/><TransitionBlocks transitions={transitions}/><HudTracker labels={hudLabels} lines={hudLines}/><CameraControls targetY={targetY} rotating={rotating} speed={speed} onUserStart={onUserStart} onUserEnd={onUserEnd} detailOpen={detailOpen}/>
  </Canvas>
@@ -269,7 +270,7 @@ function App(){
  const runDemo=async()=>{if(demoRunning)return;const token=++demoToken.current,base=[...progressRef.current],zero=Array(8).fill(0),full=Array(8).fill(MAX),path=[...buildPath(base,zero),...buildPath(zero,full),...buildPath(full,base)];let current=[...base];setHovered(null);setSelected(null);setDemoRunning(true);for(const next of path){if(token!==demoToken.current)return;const change=getChange(current,next);if(!change)continue;const id=++transitionId.current,tr={...change,id,duration:145,startedAt:performance.now()};setTransitions(prev=>[...prev,tr]);setProgress(next);progressRef.current=next;current=[...next];setTimeout(()=>setTransitions(prev=>prev.filter(t=>t.id!==id)),tr.duration+25);await wait(56)}await wait(180);if(token===demoToken.current){setProgress(base);progressRef.current=base;setTransitions([]);setDemoRunning(false)}}
  useEffect(()=>()=>{clearResume();demoToken.current+=1},[])
  return<main className={selected?'detailOpen':''}><div className="backgroundFx"/><div className="visualStage"><div className="scene"><Scene progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected} rotating={rotating} speed={rotationSpeed} onUserStart={handleUserStart} onUserEnd={handleUserEnd} hudLabels={hudLabels} hudLines={hudLines} detailOpen={!!selected}/></div><div className="sceneGlow glowA"/><div className="sceneGlow glowB"/><div className="hudScreen" aria-hidden="true"><svg className="hudLeaders">{AREAS.map((_,i)=><line key={i} ref={el=>hudLines.current[i]=el}/>)}</svg>{AREAS.map((area,i)=><div className="hudLabel" key={area} ref={el=>hudLabels.current[i]=el}><div className="hudLabelNum">{String(i+1).padStart(2,'0')}</div><div className="hudLabelCopy"><strong>{area}</strong><span>POZIOM {progress[i]} / {MAX}</span><div className="hudLabelBars">{Array.from({length:MAX}).map((_,n)=><i key={n} className={n<progress[i]?'on':''}/>)}</div></div></div>)}</div></div>
- <header><div className="micro">SW8 / MODEL 30</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>{!detailBlock&&<div className="meta">FROSTED GLASS / HUD SYSTEM<br/>8 OBSZARÓW / 6 POZIOMÓW</div>}
+ <header><div className="micro">SW8 / MODEL 31</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>{!detailBlock&&<div className="meta">FROSTED GLASS / HUD SYSTEM<br/>8 OBSZARÓW / 6 POZIOMÓW</div>}
  <DetailPanel block={detailBlock} expanded={!!selected} visible={!!detailBlock} onClose={()=>{setSelected(null);setHovered(null)}}/>
  <div className="bottomControls"><button className="pauseToggle" onClick={togglePause} aria-label={paused?'Włącz automatyczny obrót':'Zatrzymaj automatyczny obrót'} title={paused?'Play':'Pause'}>{paused?'▶':'Ⅱ'}</button><button className="controlToggle" onClick={()=>setOpen(!open)}>{open?'ZAMKNIJ':'STEROWANIE'}</button><button className={`demoToggle ${demoRunning?'isRunning':''}`} onClick={runDemo} disabled={demoRunning}>{demoRunning?'DEMO…':'DEMO'}</button></div>
  {open&&<aside><div className="buttons"><button onClick={()=>setProgress(Array(8).fill(MAX))}>Pełna wieża</button><button onClick={()=>setProgress(INITIAL)}>Reset</button></div><div className="speedControl"><div><span>AUTO OBRÓT</span><b>{rotationSpeed.toFixed(2)}×</b></div><input type="range" min="0.10" max="1.00" step="0.05" value={rotationSpeed} onInput={e=>setRotationSpeed(+e.currentTarget.value)} onChange={e=>setRotationSpeed(+e.currentTarget.value)}/><small>{paused?'Pauza trwała':interactionHold?'Wznowienie za 10 s':'Aktywny'}</small></div>{AREAS.map((a,i)=><label key={a}><span>{String(i+1).padStart(2,'0')} / {a}</span><input type="range" min="0" max={MAX} value={progress[i]} onInput={e=>update(i,e.currentTarget.value)} onChange={e=>update(i,e.currentTarget.value)}/><b>{progress[i]}/{MAX}</b></label>)}</aside>}
