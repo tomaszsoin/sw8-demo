@@ -11,7 +11,7 @@ const MOBILE=typeof window!=='undefined'&&matchMedia('(max-width:700px)').matche
 const INNER=MOBILE?1.5:1.9, OUTER=MOBILE?2.72:3.65, H=MOBILE?1.02:.82, STEP=MOBILE?1.045:.845
 const MAX_DIST=MOBILE?26:27
 const NODE_R=OUTER+.86
-const OUTER_RING=OUTER+1.48
+const OUTER_RING=NODE_R
 const ULTRAMARINE='#244DFF'
 
 const vertex=`
@@ -104,7 +104,7 @@ function HudOverlay({progress}){
   const c=center.clone().project(camera)
   const cx=(c.x*.5+.5)*size.width,cy=(-c.y*.5+.5)*size.height
   const nearest=new Set(anchors.map((world,i)=>({i,d:camera.position.distanceTo(world)})).sort((a,b)=>a.d-b.d).slice(0,3).map(x=>x.i))
-  const safeX=MOBILE?72:92,safeY=MOBILE?42:54,offset=MOBILE?48:70
+  const safeX=MOBILE?64:82,safeY=MOBILE?38:48,offset=MOBILE?18:24
   anchors.forEach((world,i)=>{
    const label=labels.current[i],line=lines.current[i]
    const visible=nearest.has(i)
@@ -117,10 +117,10 @@ function HudOverlay({progress}){
    const len=Math.hypot(dx,dy)||1;dx/=len;dy/=len
    let lx=ax+dx*offset,ly=ay+dy*offset
    lx=Math.max(safeX,Math.min(size.width-safeX,lx));ly=Math.max(safeY,Math.min(size.height-safeY,ly))
-   if(label){label.style.transform=`translate3d(${lx}px,${ly}px,0) translate(-50%,-50%)`;label.style.opacity='0.82'}
+   if(label){label.style.transform=`translate3d(${lx}px,${ly}px,0) translate(-50%,-50%)`;label.style.opacity='0.84'}
    if(line){
-    const ex=ax+(lx-ax)*.64,ey=ay+(ly-ay)*.64
-    line.setAttribute('x1',ax);line.setAttribute('y1',ay);line.setAttribute('x2',ex);line.setAttribute('y2',ey);line.style.opacity='.44'
+    const ex=ax+(lx-ax)*.82,ey=ay+(ly-ay)*.82
+    line.setAttribute('x1',ax);line.setAttribute('y1',ay);line.setAttribute('x2',ex);line.setAttribute('y2',ey);line.style.opacity='.52'
    }
   })
  })
@@ -136,20 +136,20 @@ function HudOverlay({progress}){
 }
 
 function Blueprint(){
- const rings=[INNER*.72,INNER,OUTER,OUTER+.46,OUTER+.86]
+ const rings=[INNER*.72,INNER,OUTER,OUTER+.42]
  return <group position={[0,.008,0]}>
   {rings.map((r,i)=><mesh key={r} rotation={[-Math.PI/2,0,0]}><ringGeometry args={[r-(i<3?.009:.006),r+(i<3?.009:.006),MOBILE?80:128]}/><meshBasicMaterial color={i===2?'#4b8edc':'#9bbde3'} transparent opacity={i===2?.28:i<3?.19:.11}/></mesh>)}
-  {Array.from({length:8}).map((_,i)=>{const a=i*Math.PI/4,r1=INNER*.54,r2=OUTER_RING;return <group key={i}>
+  {Array.from({length:8}).map((_,i)=>{const a=i*Math.PI/4,r1=INNER*.54,r2=NODE_R;return <group key={i}>
    <mesh position={[Math.cos(a)*(r1+r2)/2,.014,Math.sin(a)*(r1+r2)/2]} rotation={[0,-a,0]}><boxGeometry args={[.006,.006,r2-r1]}/><meshBasicMaterial color="#6d9fd7" transparent opacity={.20}/></mesh>
-   <mesh position={[Math.cos(a)*NODE_R,.019,Math.sin(a)*NODE_R]} rotation={[-Math.PI/2,0,0]}><ringGeometry args={[.085,.125,32]}/><meshBasicMaterial color="#1676df" transparent opacity={.76}/></mesh>
-   <mesh position={[Math.cos(a)*NODE_R,.020,Math.sin(a)*NODE_R]} rotation={[-Math.PI/2,0,0]}><circleGeometry args={[.032,24]}/><meshBasicMaterial color="#1676df" transparent opacity={.82}/></mesh>
+   <mesh position={[Math.cos(a)*NODE_R,.019,Math.sin(a)*NODE_R]} rotation={[-Math.PI/2,0,0]}><ringGeometry args={[.085,.125,32]}/><meshBasicMaterial color="#1676df" transparent opacity={.80}/></mesh>
+   <mesh position={[Math.cos(a)*NODE_R,.020,Math.sin(a)*NODE_R]} rotation={[-Math.PI/2,0,0]}><circleGeometry args={[.032,24]}/><meshBasicMaterial color="#1676df" transparent opacity={.84}/></mesh>
   </group>})}
  </group>
 }
 
 function Floor(){return <mesh rotation={[-Math.PI/2,0,0]} position={[0,-.035,0]}>
  <ringGeometry args={[OUTER_RING-.012,OUTER_RING+.012,128]}/>
- <meshBasicMaterial color="#aebdce" transparent opacity={.52}/>
+ <meshBasicMaterial color="#aebdce" transparent opacity={.56}/>
  </mesh>}
 
 function CameraControls({targetY,rotating,speed,onUserStart,onUserEnd}){
@@ -184,11 +184,13 @@ function Scene({progress,rotating,speed,onUserStart,onUserEnd}){
 
 function App(){
  const[progress,setProgress]=useState(INITIAL),[open,setOpen]=useState(false)
- const[paused,setPaused]=useState(false),[interactionHold,setInteractionHold]=useState(false),[rotationSpeed,setRotationSpeed]=useState(.25)
- const resumeTimer=useRef(null)
+ const[paused,setPaused]=useState(false),[interactionHold,setInteractionHold]=useState(false),[rotationSpeed,setRotationSpeed]=useState(.35)
+ const[demoRunning,setDemoRunning]=useState(false)
+ const resumeTimer=useRef(null),demoTimers=useRef([])
  const rotating=!paused&&!interactionHold
  const update=(i,v)=>setProgress(p=>p.map((x,n)=>n===i?+v:x))
  const clearResume=()=>{if(resumeTimer.current){clearTimeout(resumeTimer.current);resumeTimer.current=null}}
+ const clearDemo=()=>{demoTimers.current.forEach(clearTimeout);demoTimers.current=[]}
  const handleUserStart=()=>{clearResume();if(!paused)setInteractionHold(true)}
  const handleUserEnd=()=>{clearResume();if(!paused){resumeTimer.current=setTimeout(()=>setInteractionHold(false),10000)}}
  const togglePause=()=>{
@@ -196,15 +198,37 @@ function App(){
   if(paused){setPaused(false);setInteractionHold(false)}
   else{setPaused(true);setInteractionHold(false)}
  }
- useEffect(()=>()=>clearResume(),[])
+ const runDemo=()=>{
+  if(demoRunning)return
+  clearDemo()
+  setDemoRunning(true)
+  const base=[...progress]
+  const order=[0,1,2,3,4,5,6,7]
+  order.forEach((area,step)=>{
+   const t=step*230
+   demoTimers.current.push(setTimeout(()=>{
+    const pulse=base[area]<MAX?base[area]+1:Math.max(0,base[area]-1)
+    setProgress(p=>p.map((x,i)=>i===area?pulse:x))
+   },t))
+   demoTimers.current.push(setTimeout(()=>{
+    setProgress(p=>p.map((x,i)=>i===area?base[area]:x))
+   },t+145))
+  })
+  demoTimers.current.push(setTimeout(()=>{
+   setProgress(base)
+   setDemoRunning(false)
+  },order.length*230+100))
+ }
+ useEffect(()=>()=>{clearResume();clearDemo()},[])
  return <main>
   <div className="scene"><Scene progress={progress} rotating={rotating} speed={rotationSpeed} onUserStart={handleUserStart} onUserEnd={handleUserEnd}/></div>
   <div className="sceneGlow glowA"/><div className="sceneGlow glowB"/>
-  <header><div className="micro">SW8 / MODEL 11</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
+  <header><div className="micro">SW8 / MODEL 12</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
   <div className="meta">FROSTED GLASS / HUD SYSTEM<br/>8 NODES / 6 LEVELS</div>
   <div className="bottomControls">
    <button className="pauseToggle" onClick={togglePause} aria-label={paused?'Włącz automatyczny obrót':'Zatrzymaj automatyczny obrót'} title={paused?'Play':'Pause'}>{paused?'▶':'Ⅱ'}</button>
    <button className="controlToggle" onClick={()=>setOpen(!open)}>{open?'ZAMKNIJ':'STEROWANIE'}</button>
+   <button className={`demoToggle ${demoRunning?'isRunning':''}`} onClick={runDemo} disabled={demoRunning}>{demoRunning?'DEMO…':'DEMO'}</button>
   </div>
   {open&&<aside>
    <div className="buttons"><button onClick={()=>setProgress(Array(8).fill(MAX))}>Pełna wieża</button><button onClick={()=>setProgress(INITIAL)}>Reset</button></div>
