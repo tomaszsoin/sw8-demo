@@ -131,7 +131,7 @@ function glassMaterial(ghost=false){
  })
 }
 
-function GlassTower({progress,transitions,hovered,setHovered}){
+function GlassTower({progress,transitions,highlighted,setHovered,setSelected}){
  const active=useRef(),ghost=useRef()
  const activeMap=useRef([]),ghostMap=useRef([])
  const activeGeo=useMemo(makeInstancedGeometry,[]),ghostGeo=useMemo(makeInstancedGeometry,[])
@@ -167,16 +167,16 @@ function GlassTower({progress,transitions,hovered,setHovered}){
   const ghostHover=ghostGeo.getAttribute('instanceHover')
   activeHover.array.fill(0);ghostHover.array.fill(0)
 
-  if(hovered){
-   const map=hovered.active?activeMap.current:ghostMap.current
-   const attr=hovered.active?activeHover:ghostHover
-   const idx=map.findIndex(m=>m.area===hovered.area&&m.level===hovered.level)
+  if(highlighted){
+   const map=highlighted.active?activeMap.current:ghostMap.current
+   const attr=highlighted.active?activeHover:ghostHover
+   const idx=map.findIndex(m=>m.area===highlighted.area&&m.level===highlighted.level)
    if(idx>=0)attr.setX(idx,1)
   }
 
   activeHover.needsUpdate=true;ghostHover.needsUpdate=true
   invalidate()
- },[hovered,progress,transitions,activeGeo,ghostGeo,invalidate])
+ },[highlighted,progress,transitions,activeGeo,ghostGeo,invalidate])
 
  const hover=(map,e)=>{
   e.stopPropagation()
@@ -184,11 +184,16 @@ function GlassTower({progress,transitions,hovered,setHovered}){
   if(!meta)return
   setHovered(prev=>prev&&prev.area===meta.area&&prev.level===meta.level&&prev.active===meta.active?prev:meta)
  }
+ const select=(map,e)=>{
+  e.stopPropagation()
+  const meta=map.current[e.instanceId]
+  if(meta)setSelected({...meta})
+ }
  const leave=e=>{e.stopPropagation();setHovered(null)}
 
  return <>
-  <instancedMesh ref={ghost} args={[ghostGeo,ghostMat,48]} frustumCulled={false} onPointerMove={e=>hover(ghostMap,e)} onPointerOut={leave}/>
-  <instancedMesh ref={active} args={[activeGeo,activeMat,48]} frustumCulled={false} onPointerMove={e=>hover(activeMap,e)} onPointerOut={leave}/>
+  <instancedMesh ref={ghost} args={[ghostGeo,ghostMat,48]} frustumCulled={false} onPointerMove={e=>hover(ghostMap,e)} onPointerOut={leave} onClick={e=>select(ghostMap,e)}/>
+  <instancedMesh ref={active} args={[activeGeo,activeMat,48]} frustumCulled={false} onPointerMove={e=>hover(activeMap,e)} onPointerOut={leave} onClick={e=>select(activeMap,e)}/>
  </>
 }
 
@@ -300,13 +305,13 @@ function CameraControls({targetY,rotating,speed,onUserStart,onUserEnd}){
  />
 }
 
-function Scene({progress,transitions,hovered,setHovered,rotating,speed,onUserStart,onUserEnd,hudLabels,hudLines}){
+function Scene({progress,transitions,highlighted,setHovered,setSelected,rotating,speed,onUserStart,onUserEnd,hudLabels,hudLines}){
  const targetY=MOBILE?2.55:2.25
  const target=new THREE.Vector3(0,targetY,0),dir=new THREE.Vector3(1,.46,1.04).normalize(),pos=target.clone().add(dir.multiplyScalar(MAX_DIST))
  const camera={position:pos.toArray(),fov:MOBILE?27:29}
  return <Canvas dpr={MOBILE?[1,1.5]:[1,1.7]} gl={{antialias:true,powerPreference:'high-performance',alpha:true}} onCreated={({gl})=>gl.setClearColor(0x000000,0)} camera={camera} frameloop={rotating||transitions.length?'always':'demand'} onPointerMissed={()=>setHovered(null)}>
   <Floor/><AmbientOcclusion/><Blueprint/>
-  <GlassTower progress={progress} transitions={transitions} hovered={hovered} setHovered={setHovered}/>
+  <GlassTower progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected}/>
   <BlockOutlines/><TransitionBlocks transitions={transitions}/><HudTracker labels={hudLabels} lines={hudLines}/>
   <CameraControls targetY={targetY} rotating={rotating} speed={speed} onUserStart={onUserStart} onUserEnd={onUserEnd}/>
  </Canvas>
@@ -315,10 +320,12 @@ function Scene({progress,transitions,hovered,setHovered,rotating,speed,onUserSta
 function App(){
  const[progress,setProgress]=useState(INITIAL),[open,setOpen]=useState(false)
  const[paused,setPaused]=useState(false),[interactionHold,setInteractionHold]=useState(false),[rotationSpeed,setRotationSpeed]=useState(.35)
- const[demoRunning,setDemoRunning]=useState(false),[transitions,setTransitions]=useState([]),[hovered,setHovered]=useState(null)
+ const[demoRunning,setDemoRunning]=useState(false),[transitions,setTransitions]=useState([]),[hovered,setHovered]=useState(null),[selected,setSelected]=useState(null)
  const resumeTimer=useRef(null),demoToken=useRef(0),progressRef=useRef(INITIAL),transitionId=useRef(0)
  const hudLabels=useRef([]),hudLines=useRef([])
  const rotating=!paused&&!interactionHold
+ const detailBlock=selected||hovered
+ const highlighted=selected||hovered
 
  useEffect(()=>{progressRef.current=progress},[progress])
  useEffect(()=>{document.body.style.cursor=hovered?'pointer':'';return()=>{document.body.style.cursor=''}},[hovered])
@@ -367,7 +374,7 @@ function App(){
   const base=[...progressRef.current],zero=Array(8).fill(0),full=Array(8).fill(MAX)
   const path=[...buildPath(base,zero),...buildPath(zero,full),...buildPath(full,base)]
   let current=[...base]
-  setHovered(null);setDemoRunning(true)
+  setHovered(null);setSelected(null);setDemoRunning(true)
 
   for(const next of path){
    if(token!==demoToken.current)return
@@ -389,9 +396,9 @@ function App(){
 
  useEffect(()=>()=>{clearResume();demoToken.current+=1},[])
 
- return <main>
+ return <main className={selected?'detailOpen':''}>
   <div className="backgroundFx"/>
-  <div className="scene"><Scene progress={progress} transitions={transitions} hovered={hovered} setHovered={setHovered} rotating={rotating} speed={rotationSpeed} onUserStart={handleUserStart} onUserEnd={handleUserEnd} hudLabels={hudLabels} hudLines={hudLines}/></div>
+  <div className="scene"><Scene progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected} rotating={rotating} speed={rotationSpeed} onUserStart={handleUserStart} onUserEnd={handleUserEnd} hudLabels={hudLabels} hudLines={hudLines}/></div>
   <div className="sceneGlow glowA"/><div className="sceneGlow glowB"/>
 
   <div className="hudScreen" aria-hidden="true">
@@ -406,14 +413,21 @@ function App(){
    </div>)}
   </div>
 
-  <header><div className="micro">SW8 / MODEL 17</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
-  {!hovered&&<div className="meta">FROSTED GLASS / HUD SYSTEM<br/>8 OBSZARÓW / 6 POZIOMÓW</div>}
+  <header><div className="micro">SW8 / MODEL 18</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
+  {!detailBlock&&<div className="meta">FROSTED GLASS / HUD SYSTEM<br/>8 OBSZARÓW / 6 POZIOMÓW</div>}
 
-  {hovered&&<div className="hoverPanel">
-   <div className="hoverPanelMicro">OBSZAR {String(hovered.area+1).padStart(2,'0')} · BLOK {String(hovered.level+1).padStart(2,'0')}</div>
-   <h3>{AREAS[hovered.area]}</h3>
-   <p className="hoverQuestion">{AREA_QUESTIONS[hovered.area]}</p>
-   <div className="hoverFacts"><span>Poziom <b>{hovered.level+1}/{MAX}</b></span><span>Status <b>{hovered.active?'ukończony':'do zbudowania'}</b></span></div>
+  {detailBlock&&<div className={`hoverPanel ${selected?'isExpanded':''}`}>
+   {selected&&<button className="detailClose" onClick={()=>setSelected(null)} aria-label="Zamknij panel">×</button>}
+   <div className="hoverPanelMicro">OBSZAR {String(detailBlock.area+1).padStart(2,'0')} · BLOK {String(detailBlock.level+1).padStart(2,'0')}</div>
+   <h3>{AREAS[detailBlock.area]}</h3>
+   <p className="hoverQuestion">{AREA_QUESTIONS[detailBlock.area]}</p>
+   <div className="hoverFacts"><span>Poziom <b>{detailBlock.level+1}/{MAX}</b></span><span>Status <b>{detailBlock.active?'ukończony':'do zbudowania'}</b></span></div>
+   {selected&&<div className="detailBody">
+    <div className="detailSectionLabel">Pytanie strategiczne</div>
+    <p>{AREA_QUESTIONS[detailBlock.area]}</p>
+    <div className="detailSectionLabel">Pozycja w modelu</div>
+    <p>Obszar {detailBlock.area+1} z 8 · poziom {detailBlock.level+1} z {MAX}. Ten blok jest {detailBlock.active?'już zbudowany':'jeszcze niewypełniony'}.</p>
+   </div>}
   </div>}
 
   <div className="bottomControls">
