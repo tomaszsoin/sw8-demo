@@ -273,6 +273,59 @@ function Blueprint(){
  </group>
 }
 
+const dotVertex=`
+attribute float aAlpha;
+varying float vAlpha;
+uniform float uSize;
+void main(){
+ vec4 mvPosition=modelViewMatrix*vec4(position,1.0);
+ float perspective=18.0/max(12.0,-mvPosition.z);
+ gl_PointSize=uSize*perspective;
+ gl_Position=projectionMatrix*mvPosition;
+ vAlpha=aAlpha;
+}`
+const dotFragment=`
+varying float vAlpha;
+uniform vec3 uColor;
+void main(){
+ float d=length(gl_PointCoord-vec2(.5));
+ float disc=1.0-smoothstep(.30,.50,d);
+ if(d>.5)discard;
+ gl_FragColor=vec4(uColor,disc*vAlpha);
+}`
+
+function makeDotFieldGeometry(){
+ const positions=[],alphas=[]
+ const extent=MOBILE?12:15,spacing=MOBILE?1.02:.92,fadeStart=MOBILE?6.2:7.6
+ let index=0
+ for(let x=-extent;x<=extent;x+=spacing){
+  for(let z=-extent;z<=extent;z+=spacing){
+   const jx=Math.sin(index*12.9898)*.10
+   const jz=Math.sin(index*78.233+1.7)*.10
+   const px=x+jx,pz=z+jz,r=Math.hypot(px,pz)
+   const raw=Math.max(0,Math.min(1,(r-fadeStart)/(extent-fadeStart)))
+   const smooth=raw*raw*(3-2*raw)
+   const fade=(1-smooth)*(.52+.22*(.5+.5*Math.sin(index*4.713)))
+   if(fade>.025){positions.push(px,-.055,pz);alphas.push(fade)}
+   index++
+  }
+ }
+ const g=new THREE.BufferGeometry()
+ g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3))
+ g.setAttribute('aAlpha',new THREE.Float32BufferAttribute(alphas,1))
+ g.computeBoundingSphere()
+ return g
+}
+
+function GroundDotField(){
+ const geo=useMemo(makeDotFieldGeometry,[])
+ const mat=useMemo(()=>new THREE.ShaderMaterial({
+  vertexShader:dotVertex,fragmentShader:dotFragment,transparent:true,depthWrite:false,depthTest:true,
+  uniforms:{uColor:{value:new THREE.Color('#78879b')},uSize:{value:MOBILE?2.8:2.5}}
+ }),[])
+ return <points geometry={geo} material={mat} raycast={()=>{}} renderOrder={-3}/>
+}
+
 function Floor(){return <mesh rotation={[-Math.PI/2,0,0]} position={[0,-.035,0]} raycast={()=>{}}>
  <ringGeometry args={[OUTER_RING-.012,OUTER_RING+.012,128]}/>
  <meshBasicMaterial color="#9097a2" transparent opacity={.48}/>
@@ -301,27 +354,52 @@ function Scene({progress,transitions,highlighted,setHovered,setSelected,rotating
  const target=new THREE.Vector3(0,targetY,0),dir=new THREE.Vector3(1,.46,1.04).normalize(),pos=target.clone().add(dir.multiplyScalar(MAX_DIST))
  const camera={position:pos.toArray(),fov:MOBILE?27:29}
  return <Canvas dpr={MOBILE?[1,1.5]:[1,1.7]} gl={{antialias:true,powerPreference:'high-performance',alpha:true}} onCreated={({gl})=>gl.setClearColor(0x000000,0)} camera={camera} frameloop={rotating||transitions.length?'always':'demand'} onPointerMissed={()=>setHovered(null)}>
-  <Floor/><AmbientOcclusion/><Blueprint/>
+  <GroundDotField/><Floor/><AmbientOcclusion/><Blueprint/>
   <GlassTower progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected}/>
   <BlockOutlines/><TransitionBlocks transitions={transitions}/><HudTracker labels={hudLabels} lines={hudLines}/>
   <CameraControls targetY={targetY} rotating={rotating} speed={speed} onUserStart={onUserStart} onUserEnd={onUserEnd}/>
  </Canvas>
 }
 
-function DetailPanel({block,expanded,onClose}){
+function getSegmentInfo(block){
  const area=SW8_AREAS[block.area]
- return <div className={`hoverPanel ${expanded?'isExpanded':''}`}>
-  {expanded&&<button className="detailClose" onClick={onClose} aria-label="Zamknij panel">×</button>}
-  <div className="hoverPanelMicro">OBSZAR {String(block.area+1).padStart(2,'0')} · SEGMENT {String(block.level+1).padStart(2,'0')}</div>
+ const canonical=area.blocks[block.level]
+ if(canonical){
+  return {title:canonical[0],summary:canonical[1],foundation:!!canonical[2],projection:false}
+ }
+ return {
+  title:'Warstwa projekcyjna obszaru',
+  summary:area.outcome,
+  foundation:false,
+  projection:true
+ }
+}
+
+function DetailPanel({block,expanded,visible,onClose}){
+ const safeBlock=block||{area:0,level:0,active:false}
+ const area=SW8_AREAS[safeBlock.area]
+ const segment=getSegmentInfo(safeBlock)
+ return <div className={`hoverPanel ${visible?'isVisible':''} ${expanded?'isExpanded':''}`} aria-hidden={!visible}>
+  <button className="detailClose" onClick={onClose} aria-label="Zamknij panel">×</button>
+  <div className="hoverPanelMicro">OBSZAR {String(safeBlock.area+1).padStart(2,'0')} · SEGMENT {String(safeBlock.level+1).padStart(2,'0')}</div>
   <h3>{area.name}</h3>
-  <p className="hoverQuestion">{area.question}</p>
+  <div className="compactBlockInfo">
+   <div className="compactBlockLabel">{segment.projection?'PROJEKCJA OBSZARU':'KLOCEK STRATEGICZNY'}{segment.foundation?' · FOUNDATION':''}</div>
+   <div className="compactBlockTitle">{segment.title}</div>
+   <p>{segment.summary}</p>
+  </div>
   <div className="hoverFacts">
-   <span>Segment wizualizacji <b>{block.level+1}/{MAX}</b></span>
-   <span>Stan <b>{block.active?'zbudowany':'niewypełniony'}</b></span>
+   <span>Segment wizualizacji <b>{safeBlock.level+1}/{MAX}</b></span>
+   <span>Stan <b>{safeBlock.active?'zbudowany':'niewypełniony'}</b></span>
    <span>Klocki strategiczne <b>{area.blocks.length}</b></span>
   </div>
 
-  {expanded&&<div className="detailBody">
+  <div className="detailBody">
+   <section className="detailSection">
+    <div className="detailSectionLabel">Pytanie fundamentalne</div>
+    <p>{area.question}</p>
+   </section>
+
    <section className="detailSection">
     <div className="detailSectionLabel">Outcome obszaru</div>
     <p>{area.outcome}</p>
@@ -349,7 +427,7 @@ function DetailPanel({block,expanded,onClose}){
    </section>
 
    <div className="projectionNote">Wieża jest projekcją modelu. SW8 v0.2 nie wymusza równej liczby Strategic Blocks w każdym obszarze, dlatego 6 poziomów tej wersji demo nie jest mapowaniem 1:1 na kanoniczne Blocki.</div>
-  </div>}
+  </div>
  </div>
 }
 
@@ -434,25 +512,27 @@ function App(){
 
  return <main className={selected?'detailOpen':''}>
   <div className="backgroundFx"/>
-  <div className="scene"><Scene progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected} rotating={rotating} speed={rotationSpeed} onUserStart={handleUserStart} onUserEnd={handleUserEnd} hudLabels={hudLabels} hudLines={hudLines}/></div>
-  <div className="sceneGlow glowA"/><div className="sceneGlow glowB"/>
 
-  <div className="hudScreen" aria-hidden="true">
-   <svg className="hudLeaders">{AREAS.map((_,i)=><line key={i} ref={el=>hudLines.current[i]=el}/>)}</svg>
-   {AREAS.map((area,i)=><div className="hudLabel" key={area} ref={el=>hudLabels.current[i]=el}>
-    <div className="hudLabelNum">{String(i+1).padStart(2,'0')}</div>
-    <div className="hudLabelCopy">
-     <strong>{area}</strong>
-     <span>POZIOM {progress[i]} / {MAX}</span>
-     <div className="hudLabelBars">{Array.from({length:MAX}).map((_,n)=><i key={n} className={n<progress[i]?'on':''}/>)}</div>
-    </div>
-   </div>)}
+  <div className="visualStage">
+   <div className="scene"><Scene progress={progress} transitions={transitions} highlighted={highlighted} setHovered={setHovered} setSelected={setSelected} rotating={rotating} speed={rotationSpeed} onUserStart={handleUserStart} onUserEnd={handleUserEnd} hudLabels={hudLabels} hudLines={hudLines}/></div>
+   <div className="sceneGlow glowA"/><div className="sceneGlow glowB"/>
+   <div className="hudScreen" aria-hidden="true">
+    <svg className="hudLeaders">{AREAS.map((_,i)=><line key={i} ref={el=>hudLines.current[i]=el}/>)}</svg>
+    {AREAS.map((area,i)=><div className="hudLabel" key={area} ref={el=>hudLabels.current[i]=el}>
+     <div className="hudLabelNum">{String(i+1).padStart(2,'0')}</div>
+     <div className="hudLabelCopy">
+      <strong>{area}</strong>
+      <span>POZIOM {progress[i]} / {MAX}</span>
+      <div className="hudLabelBars">{Array.from({length:MAX}).map((_,n)=><i key={n} className={n<progress[i]?'on':''}/>)}</div>
+     </div>
+    </div>)}
+   </div>
   </div>
 
-  <header><div className="micro">SW8 / MODEL 19</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
+  <header><div className="micro">SW8 / MODEL 20</div><h1>SW8<br/>Wizualizacja strategii</h1><p>8 obszarów. Każdy ukończony blok buduje kolejny poziom strategii.</p></header>
   {!detailBlock&&<div className="meta">FROSTED GLASS / HUD SYSTEM<br/>8 OBSZARÓW / 6 POZIOMÓW</div>}
 
-  {detailBlock&&<DetailPanel block={detailBlock} expanded={!!selected} onClose={()=>setSelected(null)}/>} 
+  <DetailPanel block={detailBlock} expanded={!!selected} visible={!!detailBlock} onClose={()=>{setSelected(null);setHovered(null)}}/>
 
   <div className="bottomControls">
    <button className="pauseToggle" onClick={togglePause} aria-label={paused?'Włącz automatyczny obrót':'Zatrzymaj automatyczny obrót'} title={paused?'Play':'Pause'}>{paused?'▶':'Ⅱ'}</button>
