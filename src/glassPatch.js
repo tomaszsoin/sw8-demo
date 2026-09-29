@@ -53,6 +53,45 @@ THREE.LineDashedMaterial.prototype.setValues = function(values){
   return originalDashedSetValues.call(this,values)
 }
 
+// Mobile-only polish: keep HUD labels outside the tower, stack their content
+// vertically, and soften the full-screen vignette.
+function installMobilePolish(){
+  if(typeof document==='undefined')return
+  const style=document.createElement('style')
+  style.setAttribute('data-sw8-mobile-polish','')
+  style.textContent=`
+    @media (max-width:700px){
+      .backgroundFx{
+        background:radial-gradient(ellipse at 50% 47%,rgba(255,255,255,.26) 0%,rgba(247,247,247,.04) 48%,rgba(235,236,239,.10) 72%,rgba(214,216,222,.24) 100%)!important;
+      }
+      .backgroundFx::before{
+        background:radial-gradient(ellipse at 50% 50%,transparent 58%,rgba(184,188,197,.04) 80%,rgba(158,163,174,.09) 100%)!important;
+      }
+      .hudLabel{
+        flex-direction:column!important;
+        gap:2px!important;
+        max-width:78px!important;
+        align-items:flex-start!important;
+        margin-left:12px;
+      }
+      .hudLabel[data-side="left"]{
+        flex-direction:column!important;
+        align-items:flex-end!important;
+        margin-left:-12px;
+      }
+      .hudLabelNum{font-size:9px!important;line-height:1!important;}
+      .hudLabelCopy{min-width:0!important;max-width:76px!important;gap:1px!important;}
+      .hudLabel[data-side="left"] .hudLabelCopy{text-align:right!important;align-items:flex-end!important;}
+      .hudLabelCopy strong{font-size:4.8px!important;max-width:76px!important;line-height:1.18!important;}
+      .hudLabelCopy span{font-size:4.6px!important;}
+      .hudLabelBars{margin-top:1px!important;}
+      .hudLabelBars i{width:3px!important;height:3px!important;}
+    }
+  `
+  document.head.appendChild(style)
+}
+installMobilePolish()
+
 function markVersion(){
   const el=document.querySelector('.micro')
   if(!el){requestAnimationFrame(markVersion);return}
